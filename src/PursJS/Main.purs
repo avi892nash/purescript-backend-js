@@ -18,6 +18,7 @@ import Node.Process as Process
 import PursJS.CodeGen.JS (runModuleToJs)
 import PursJS.CodeGen.Printer (prettyPrintModule)
 import PursJS.CoreFn.FromJSON (parseModule)
+import PursJS.PSString (mkString)
 
 main :: Effect Unit
 main = do
@@ -29,7 +30,8 @@ main = do
       Console.error "Usage: pursjs <path-to-corefn.json> [--no-comments]"
       Process.exit' 1
     Just { head: path, tail } -> do
-      let noComments = Array.elem "--no-comments" tail
+      -- purs's default is no comments. Use --with-comments to opt in.
+      let noComments = not (Array.elem "--with-comments" tail)
       buf <- FS.readFile path
       contents <- Buffer.toString UTF8 buf
       case parseModule contents of
@@ -37,6 +39,9 @@ main = do
           Console.error ("parse error: " <> e)
           Process.exit' 1
         Right m -> do
-          let mod = runModuleToJs { noComments } m Nothing
+          let foreignInclude =
+                if Array.null m.foreign_ then Nothing
+                else Just (mkString "./foreign.js")
+          let mod = runModuleToJs { noComments } m foreignInclude
           let out = prettyPrintModule mod
           Console.log out

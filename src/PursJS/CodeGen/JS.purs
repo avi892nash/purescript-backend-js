@@ -28,12 +28,13 @@ import Data.Traversable (traverse, sequence)
 import Data.Tuple (Tuple(..), fst, snd)
 import PursJS.CodeGen.Common (anyNameToJs, identCharToText, identToJs, moduleNameToJs, properToJs)
 import PursJS.CodeGen.Supply (Supply, freshName)
+import PursJS.CoreImp.Optimizer (optimize)
 import PursJS.Comments (Comment)
 import PursJS.CoreFn.Types (Bind(..), Binder(..), CaseAlternative(..), ConstructorType(..), Expr(..), Literal(..), Meta(..)) as CF
 import PursJS.CoreFn.Types (Ann, Bind, Binder, CaseAlternative, Expr, Literal, Module)
 import PursJS.CoreImp.AST (AST(..), BinaryOperator(..), CIComments(..), InitializerEffects(..), UnaryOperator(..))
 import PursJS.CoreImp.Module (Export(..), Import(..), Module) as M
-import PursJS.Names (Ident(..), ModuleName(..), Qualified(..), QualifiedBy(..), ProperName, runIdent, runModuleName, runProperName)
+import PursJS.Names (Ident(..), ModuleName(..), Qualified(..), QualifiedBy(..), ProperName, SourcePos(..), SourceSpan(..), runIdent, runModuleName, runProperName)
 import PursJS.PSString (PSString, mkString)
 
 -- | Foreign module namespace identifier
@@ -88,7 +89,9 @@ moduleToJs opts m foreignInclude = do
 
   -- Generate code for each declaration
   jsDeclLists <- traverse (moduleBindToJs opts mn) decls
-  let jsDecls = Array.concat jsDeclLists
+  -- Run AST-level optimizer passes
+  let optimized = optimize (map identToJs exps) jsDeclLists
+  let jsDecls = Array.concat optimized
   let annotated = map annotatePure jsDecls
 
   -- header
@@ -273,9 +276,9 @@ moduleBindToJs opts mn = bindToJs
       _ -> do
         fJs <- valueToJs f
         pure (foldl curryApp fJs args')
-  valueToJs' (CF.Case _ values binders) = do
+  valueToJs' (CF.Case ann values binders) = do
     vals <- traverse valueToJs values
-    bindersToJs binders vals
+    bindersToJs ann.ss binders vals
   valueToJs' (CF.Let _ ds val) = do
     declsArr <- Array.concat <$> traverse bindToJs ds
     ret <- valueToJs val
@@ -393,8 +396,8 @@ moduleBindToJs opts mn = bindToJs
 
   -- ===== case / binders =====
 
-  bindersToJs :: Array (CaseAlternative Ann) -> Array AST -> Supply AST
-  bindersToJs binders vals = do
+  bindersToJs :: SourceSpan -> Array (CaseAlternative Ann) -> Array AST -> Supply AST
+  bindersToJs ss binders vals = do
     valNames <- traverse (\_ -> freshName) vals
     let assignments =
           zipWith
@@ -422,7 +425,15 @@ moduleBindToJs opts mn = bindToJs
 
     failedPatternMessage :: String
     failedPatternMessage =
-      "Failed pattern match"
+      "Failed pattern match at " <> runModuleName mn <> " " <> displayStartEndPos ss <> ": "
+
+    displayStartEndPos :: SourceSpan -> String
+    displayStartEndPos (SourceSpan sp) =
+      "(" <> displaySourcePos sp.start <> " - " <> displaySourcePos sp.end <> ")"
+
+    displaySourcePos :: SourcePos -> String
+    displaySourcePos (SourcePos line col) =
+      "line " <> show line <> ", column " <> show col
 
     valueError :: String -> AST -> AST
     valueError _ l@(NumericLiteral _ _) = l
