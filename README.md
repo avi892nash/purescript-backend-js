@@ -59,34 +59,58 @@ VERBOSE=1 ./bin/diff-codegen.sh
 
 Pipeline is wired end-to-end:
 
-  CoreFn JSON → CoreImp AST → JS text
+  CoreFn JSON → CoreImp AST → optimizer passes → JS text
 
-Identical to `purs` on simple modules without type-class-method usage
-(`Simple`, `Data.Boolean`, `Data.Field`, `Data.NaturalTransformation`).
+Diff against the full Prelude+Effect+Console set:
+**51/58 modules byte-identical** to `purs`'s output, including all of
+`Prelude`, `Tiny` (which uses `+`), `Control.*`, `Data.Eq`, `Data.Ord`,
+the `Data.Monoid.*` set, and so on.
 
-Diff against the full Prelude+Effect+Console set: 4/58 identical, 54/58 differ
-by missing optimizations.
+```
+$ ./bin/diff-codegen.sh
+Comparing 58 modules...
+Summary: 51 identical, 7 differ, 0 errored
+```
 
-## What's not yet ported (causes the diffs)
+## What's ported
 
-The `Language.PureScript.CoreImp.Optimizer` pipeline runs many passes after
-`CodeGen.JS`; without them, our output is structurally correct but verbose
-(IIFEs wrapping each case-expression, helper dictionaries kept that purs
-would inline away). Passes to port, in priority order:
+- **Frontend types** — `Names`, `PSString`, `Comments`, `CoreFn.*`
+- **CoreFn JSON reader** — full `corefn.json` schema (every variant in
+  `CodeGen/CoreFn/FromJSON.hs`).
+- **CoreImp AST + Module** — all variants (`NumericLiteral`, `Unary`,
+  `Binary`, `Function`, `App`, `Case`-shaped IIFEs, etc.).
+- **CodeGen.Common** — JS identifier escaping (`$dollar`, `$bang`, …), reserved
+  words, JS built-in shadow list.
+- **CodeGen.JS** — the `moduleToJs` transform, including:
+  - Pattern-match codegen (`bindersToJs`, `binderToJs`, `literalToBinderJS`)
+    with the exact "Failed pattern match at <Module> (line …, column …)" message
+  - Constructor codegen (newtype short-cut, IIFE-with-`.create` factory)
+  - ObjectUpdate (full copy via `for..in` IIFE; field-preserving variant)
+  - `accessorString`, `iife`, `varToJs`, `qualifiedToJS`, `foreignIdent`
+  - Import renaming to avoid collision with declared names
+  - `replaceModuleAccessors` rewriting `ModuleAccessor` → `Indexer (Var alias)`
+  - `annotatePure` for `/* #__PURE__ */` markers on top-level values
+- **CodeGen.Printer** — full pretty-printer with the same operator
+  precedence table as `pattern-arrows` produces (16 levels, AssocL/AssocR/Wrap).
+- **CoreImp.Optimizer** — pipeline matching `Optimizer.optimize`:
+  - **Blocks**: `collapseNestedBlocks`, `collapseNestedIfs`
+  - **Inliner**: `etaConvert`, `unThunk`, `evaluateIifes`, `inlineVariables`,
+    `shouldInline`
+  - **Unused**: `removeCodeAfterReturnStatements`, `removeUndefinedApp`,
+    `removeUnusedEffectFreeVars`
+  - **Inliner2**: `buildExpander`, `inlineCommonValues`, `inlineCommonOperators`
+    (covers `Semiring/Ring/EuclideanRing/Eq/Ord/Semigroup/HeytingAlgebra/Bounded`
+    dictionaries for `Int`, `Number`, `String`, `Char`, `Boolean`),
+    `inlineFnIdentity`, `inlineUnsafeCoerce`
 
-  - `evaluateIifes`, `unThunk`, `removeCodeAfterReturnStatements`
-    → collapse the case-expression IIFEs we emit
-  - `inlineVariables`, `etaConvert`
-    → inline trivial single-use locals
-  - `collapseNestedBlocks`, `collapseNestedIfs`
-    → cleanup
-  - `removeUnusedEffectFreeVars`
-    → strip dictionary helpers that have been inlined away
-  - `inlineCommonOperators`, `inlineCommonValues`
-    → turn `Data_Semiring.add(semiringInt)(x)(1)` into `x + 1 | 0`
-  - `magicDoEffect`, `magicDoEff`, `magicDoST`, `inlineST`
-    → flatten do-notation
-  - `tco`
-    → tail-call optimization for recursive functions
-  - `applyLazinessTransform`, `runtimeLazy`
-    → recursive let bindings
+## What's NOT yet ported (the remaining 7 diffs)
+
+| Module                       | Pass needed                                          |
+|------------------------------|------------------------------------------------------|
+| `Data.Void`, `Data.Function` | `tco` — tail-call optimization                       |
+| `Effect.Console`, `Effect.Class.Console` | `magicDoEffect`, `inlineFnComposition`   |
+| `Effect`                     | `applyLazinessTransform` + `$runtime_lazy` for recursive bindings |
+| `Data.Ord`, `Data.EuclideanRing` | Fresh-name supply alignment with the Haskell compiler's `Supply` (cosmetic — same code, different `$N` numbering) |
+
+The architecture supports porting these incrementally; the file layout
+mirrors `Language.PureScript.CoreImp.Optimizer.{TCO,MagicDo,Inliner}`.
