@@ -1,0 +1,13 @@
+package:
+  name: sample-purs
+  dependencies:
+    - console
+    - effect
+    - prelude
+  test:
+    main: Test.Main
+    dependencies: []
+workspace:
+  package_set:
+    registry: 76.2.1
+  extra_packages: {}

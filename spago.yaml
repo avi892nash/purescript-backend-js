@@ -1,0 +1,29 @@
+package:
+  name: pursjs-codegen
+  run:
+    main: PursJS.Main
+  dependencies:
+    - prelude
+    - effect
+    - console
+    - node-buffer
+    - node-fs
+    - node-process
+    - arrays
+    - foldable-traversable
+    - maybe
+    - either
+    - tuples
+    - strings
+    - integers
+    - ordered-collections
+    - argonaut-core
+    - lists
+    - numbers
+    - transformers
+    - control
+    - exceptions
+workspace:
+  package_set:
+    registry: 76.2.1
+  extra_packages: {}

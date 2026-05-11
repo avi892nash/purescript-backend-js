@@ -1,0 +1,11 @@
+output/
+output_ref/
+.spago/
+spago.lock
+.psc-ide-port
+*.log
+node_modules/
+sample-purs/output/
+sample-purs/output_ref/
+sample-purs/.spago/
+sample-purs/spago.lock
