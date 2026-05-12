@@ -62,14 +62,15 @@ Pipeline is wired end-to-end:
   CoreFn JSON → CoreImp AST → optimizer passes → JS text
 
 Diff against the full Prelude+Effect+Console set:
-**51/58 modules byte-identical** to `purs`'s output, including all of
-`Prelude`, `Tiny` (which uses `+`), `Control.*`, `Data.Eq`, `Data.Ord`,
+**54/58 modules byte-identical** to `purs`'s output, including all of
+`Prelude`, `Tiny` (which uses `+`), `Control.*`, `Data.Eq`, `Data.Function`
+(tail-call optimized), `Data.Void`, `Effect.Console` (magic-do optimized),
 the `Data.Monoid.*` set, and so on.
 
 ```
 $ ./bin/diff-codegen.sh
 Comparing 58 modules...
-Summary: 51 identical, 7 differ, 0 errored
+Summary: 54 identical, 4 differ, 0 errored
 ```
 
 ## What's ported
@@ -102,15 +103,53 @@ Summary: 51 identical, 7 differ, 0 errored
     (covers `Semiring/Ring/EuclideanRing/Eq/Ord/Semigroup/HeytingAlgebra/Bounded`
     dictionaries for `Int`, `Number`, `String`, `Char`, `Boolean`),
     `inlineFnIdentity`, `inlineUnsafeCoerce`
+  - **FnComposition**: `inlineFnComposition` (turns `compose(f)(g)` into
+    `function ($N) { return f(g($N)); }`)
+  - **MagicDo**: `magicDoEffect` (collapses `bind`/`discard`/`pure` chains
+    into `function __do() { ... }`)
+  - **TCO**: tail-call optimization for self-recursive top-level functions
 
-## What's NOT yet ported (the remaining 7 diffs)
+## What's NOT yet ported (the remaining 4 diffs)
 
 | Module                       | Pass needed                                          |
 |------------------------------|------------------------------------------------------|
-| `Data.Void`, `Data.Function` | `tco` — tail-call optimization                       |
-| `Effect.Console`, `Effect.Class.Console` | `magicDoEffect`, `inlineFnComposition`   |
-| `Effect`                     | `applyLazinessTransform` + `$runtime_lazy` for recursive bindings |
-| `Data.Ord`, `Data.EuclideanRing` | Fresh-name supply alignment with the Haskell compiler's `Supply` (cosmetic — same code, different `$N` numbering) |
+| `Effect`                     | `applyLazinessTransform` + `$runtime_lazy` for recursive bindings (~ 568 lines) |
+| `Data.Ord`, `Data.EuclideanRing`, `Effect.Class.Console` | Fresh-name supply alignment with the Haskell compiler's `Supply`. Output is **structurally identical** — only the `$N` numbering differs because purs's supply counter starts at a non-zero offset after CoreFn-stage CSE/desugaring passes that we don't run. |
 
 The architecture supports porting these incrementally; the file layout
-mirrors `Language.PureScript.CoreImp.Optimizer.{TCO,MagicDo,Inliner}`.
+mirrors `Language.PureScript.CoreImp.Optimizer.*` and
+`Language.PureScript.CoreFn.Laziness`.
+
+## Pipeline summary
+
+```
+            corefn.json                      ┐
+                ↓                            │
+        FromJSON.parseModule                 │  Haskell-compiler stages
+                ↓                            │  produce this (CST→AST→
+       Module Ann (CoreFn AST)               ┘  Desugar→TypeCheck→CoreFn)
+                ↓
+       CodeGen.JS.moduleToJs (Supply Int) ─ traverses each declaration
+                ↓
+       Array (Array CoreImp.AST)          ─ optimizer pipeline:
+                ↓
+       Optimizer.optimize:                   tidyUp + type-class inliner
+       ┌──────────────────────────┐          (loop until fixed point)
+       │ inlineCommonValues       │          ↓
+       │ inlineCommonOperators    │          + inlineFnComposition (monadic)
+       │ inlineFnIdentity         │          ↓
+       │ inlineUnsafeCoerce       │          magicDoEffect
+       │ tidyUp [Blocks, Inliner, │          ↓
+       │   Unused, EvalIifes]     │          tco
+       └──────────────────────────┘          ↓
+                ↓                            removeUnusedEffectFreeVars
+       annotatePure (top-level)
+                ↓
+       walkModule (replaceModuleAccessors with usedModules tracking)
+                ↓
+       Module (CoreImp.Module: header, imports, body, exports)
+                ↓
+       Printer.prettyPrintModule (recursive descent with precedence)
+                ↓
+            index.js
+```

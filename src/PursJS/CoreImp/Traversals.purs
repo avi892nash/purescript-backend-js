@@ -7,6 +7,7 @@ import Prelude
 
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import PursJS.CoreImp.AST (AST(..))
 
@@ -65,6 +66,39 @@ everywhereTopDown f = go <<< f
   go (InstanceOf ss j1 j2) = InstanceOf ss (go (f j1)) (go (f j2))
   go (Comment com j) = Comment com (go (f j))
   go other = other
+
+-- | Monadic top-down traversal: apply f, then recurse into children.
+everywhereTopDownM :: forall m. Monad m => (AST -> m AST) -> AST -> m AST
+everywhereTopDownM f x = f x >>= go
+  where
+  fp :: AST -> m AST
+  fp y = f y >>= go
+
+  go :: AST -> m AST
+  go (Unary ss op j) = Unary ss op <$> fp j
+  go (Binary ss op j1 j2) = Binary ss op <$> fp j1 <*> fp j2
+  go (ArrayLiteral ss js) = ArrayLiteral ss <$> traverse fp js
+  go (Indexer ss j1 j2) = Indexer ss <$> fp j1 <*> fp j2
+  go (ObjectLiteral ss js) =
+    ObjectLiteral ss <$> traverse (\(Tuple k v) -> Tuple k <$> fp v) js
+  go (Function ss name args j) = Function ss name args <$> fp j
+  go (App ss j js) = App ss <$> fp j <*> traverse fp js
+  go (Block ss js) = Block ss <$> traverse fp js
+  go (VariableIntroduction ss name Nothing) =
+    pure (VariableIntroduction ss name Nothing)
+  go (VariableIntroduction ss name (Just (Tuple eff j))) =
+    (\j' -> VariableIntroduction ss name (Just (Tuple eff j'))) <$> fp j
+  go (Assignment ss j1 j2) = Assignment ss <$> fp j1 <*> fp j2
+  go (While ss j1 j2) = While ss <$> fp j1 <*> fp j2
+  go (For ss name j1 j2 j3) = For ss name <$> fp j1 <*> fp j2 <*> fp j3
+  go (ForIn ss name j1 j2) = ForIn ss name <$> fp j1 <*> fp j2
+  go (IfElse ss j1 j2 j3) =
+    IfElse ss <$> fp j1 <*> fp j2 <*> traverse fp j3
+  go (Return ss j) = Return ss <$> fp j
+  go (Throw ss j) = Throw ss <$> fp j
+  go (InstanceOf ss j1 j2) = InstanceOf ss <$> fp j1 <*> fp j2
+  go (Comment com j) = Comment com <$> fp j
+  go other = pure other
 
 -- | Fold over all nodes (including the root). Combine with the supplied
 -- | semigroup-like combinator and accumulator function.

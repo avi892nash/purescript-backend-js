@@ -119,3 +119,22 @@ p_unsafeCoerce :: Ref
 p_unsafeCoerce = mkRef "Unsafe.Coerce" "unsafeCoerce"
 p_unsafePartial :: Ref
 p_unsafePartial = mkRef "Partial.Unsafe" "unsafePartial"
+
+-- Control.Bind / Control.Applicative — used by magicDo
+p_bind :: Ref
+p_bind = mkRef "Control.Bind" "bind"
+p_discard :: Ref
+p_discard = mkRef "Control.Bind" "discard"
+p_discardUnit :: Ref
+p_discardUnit = mkRef "Control.Bind" "discardUnit"
+p_pure :: Ref
+p_pure = mkRef "Control.Applicative" "pure"
+
+-- Effect — magicDoEffect target dictionaries
+p_bindEffect :: Ref
+p_bindEffect = mkRef "Effect" "bindEffect"
+p_applicativeEffect :: Ref
+p_applicativeEffect = mkRef "Effect" "applicativeEffect"
+
+p_m_Effect :: ModuleName
+p_m_Effect = ModuleName "Effect"

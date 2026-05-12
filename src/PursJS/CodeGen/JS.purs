@@ -90,7 +90,7 @@ moduleToJs opts m foreignInclude = do
   -- Generate code for each declaration
   jsDeclLists <- traverse (moduleBindToJs opts mn) decls
   -- Run AST-level optimizer passes
-  let optimized = optimize (map identToJs exps) jsDeclLists
+  optimized <- optimize (map identToJs exps) jsDeclLists
   let jsDecls = Array.concat optimized
   let annotated = map annotatePure jsDecls
 
