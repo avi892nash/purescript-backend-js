@@ -61,16 +61,37 @@ Pipeline is wired end-to-end:
 
   CoreFn JSON → CoreImp AST → optimizer passes → JS text
 
-Diff against the full Prelude+Effect+Console set:
-**54/58 modules byte-identical** to `purs`'s output, including all of
-`Prelude`, `Tiny` (which uses `+`), `Control.*`, `Data.Eq`, `Data.Function`
-(tail-call optimized), `Data.Void`, `Effect.Console` (magic-do optimized),
-the `Data.Monoid.*` set, and so on.
+Diff against the full Prelude+Effect+Console set plus 12 hand-written examples:
+**65/70 modules byte-identical** to `purs`'s output, **69/70 semantically
+identical** under `$N` fresh-name normalization.
 
 ```
 $ ./bin/diff-codegen.sh
-Comparing 58 modules...
-Summary: 54 identical, 4 differ, 0 errored
+Comparing 70 modules in byte-identical mode...
+Summary: 65 identical, 5 differ, 0 errored
+
+$ SEMANTIC=1 ./bin/diff-codegen.sh
+Comparing 70 modules in semantic ($N normalized) mode...
+Summary: 69 identical, 1 differ, 0 errored
+```
+
+Of the 5 byte-only diffs:
+- 4 differ ONLY in `$N` fresh-name numbering (`Data.EuclideanRing`,
+  `Data.Ord`, `Effect.Class.Console`, `Examples.Closures`). Purs's Supply
+  counter starts at a non-zero offset because desugar/case-guards/CSE
+  phases allocate names we don't replicate. Semantically identical.
+- 1 (`Effect`) uses `$lazy_*` wrappers in a different order than purs.
+  Both versions execute correctly at runtime.
+
+We verified by direct execution that the generated JavaScript matches
+purs's behavior. The `bin/test-runtime.sh` driver loads a module via both
+codegens and compares the result of calling the same exports. The Effect
+case in particular exercises the mutually-recursive instance dictionaries
+that motivated the laziness transform:
+
+```
+$ ./bin/test-runtime.sh Effect
+RUNTIME MATCH: Effect ✓
 ```
 
 ## What's ported
@@ -109,16 +130,19 @@ Summary: 54 identical, 4 differ, 0 errored
     into `function __do() { ... }`)
   - **TCO**: tail-call optimization for self-recursive top-level functions
 
-## What's NOT yet ported (the remaining 4 diffs)
+- **CodeGen.Laziness** — minimal port of `CoreFn.Laziness.applyLazinessTransform`:
+  for each `Rec` group, lazy-wrap any binding whose initializer has an eager
+  reference to a sibling, and rewrite sibling references in the wrapped
+  initializers (and any non-wrapped siblings) as `$lazy_X(0)` calls.
+  Prepends the `$runtime_lazy` runtime helper at module top when any wrapping
+  occurred. Mirrors `JS.hs:209-229` (`runtimeLazy`) + `CoreFn/Laziness.hs`.
 
-| Module                       | Pass needed                                          |
-|------------------------------|------------------------------------------------------|
-| `Effect`                     | `applyLazinessTransform` + `$runtime_lazy` for recursive bindings (~ 568 lines) |
-| `Data.Ord`, `Data.EuclideanRing`, `Effect.Class.Console` | Fresh-name supply alignment with the Haskell compiler's `Supply`. Output is **structurally identical** — only the `$N` numbering differs because purs's supply counter starts at a non-zero offset after CoreFn-stage CSE/desugaring passes that we don't run. |
+## Remaining cosmetic diffs
 
-The architecture supports porting these incrementally; the file layout
-mirrors `Language.PureScript.CoreImp.Optimizer.*` and
-`Language.PureScript.CoreFn.Laziness`.
+| Module                       | Why it diffs                                          |
+|------------------------------|--------------------------------------------------------|
+| `Data.Ord`, `Data.EuclideanRing`, `Effect.Class.Console`, `Examples.Closures` | Fresh-name supply alignment with the Haskell compiler's `Supply`. Output is **structurally identical** — only the `$N` numbering differs because purs's supply counter starts at a non-zero offset after desugar/case-guards/CSE phases that we don't run. `SEMANTIC=1 ./bin/diff-codegen.sh` confirms structural equivalence. |
+| `Effect`                     | Lazy-wrap emission order differs from purs's (functorEffect-before-applyEffect vs the reverse). Both versions evaluate the same way at runtime — verified by `./bin/test-runtime.sh Effect`. |
 
 ## Pipeline summary
 

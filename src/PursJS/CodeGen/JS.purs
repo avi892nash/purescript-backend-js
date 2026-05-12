@@ -51,8 +51,11 @@ import Data.String.CodeUnits as SC
 import Data.Traversable (traverse, sequence)
 import Data.Tuple (Tuple(..), fst, snd)
 import PursJS.CodeGen.Common (anyNameToJs, identCharToText, identToJs, moduleNameToJs, properToJs)
+import PursJS.CodeGen.Laziness (hasEagerSiblingRef, lazyName, rewriteSiblingRefs, runtimeLazyAST)
 import PursJS.CodeGen.Supply (Supply, freshName)
 import PursJS.CoreImp.Optimizer (optimize)
+import PursJS.CoreImp.Traversals (everything) as Trav
+import Data.Set as Set
 import PursJS.Comments (Comment)
 import PursJS.CoreFn.Types (Bind(..), Binder(..), CaseAlternative(..), ConstructorType(..), Expr(..), Literal(..), Meta(..)) as CF
 import PursJS.CoreFn.Types (Ann, Bind, Binder, CaseAlternative, Expr, Literal, Module)
@@ -64,6 +67,14 @@ import PursJS.PSString (PSString, mkString)
 -- | Foreign module namespace identifier
 ffiNamespace :: String
 ffiNamespace = "$foreign"
+
+-- | True iff `ast` contains any `Var "$runtime_lazy"` reference. Used to
+-- | decide whether to prepend the `$runtime_lazy` runtime helper to the module.
+usesRuntimeLazy :: AST -> Boolean
+usesRuntimeLazy = Trav.everything (||) check
+  where
+  check (Var _ "$runtime_lazy") = true
+  check _ = false
 
 -- | Hard-coded primitive module list (mirrors Constants.Prim.primModules in
 -- | the Haskell compiler).
@@ -113,8 +124,15 @@ moduleToJs opts m foreignInclude = do
 
   -- Generate code for each declaration
   jsDeclLists <- traverse (moduleBindToJs opts mn) decls
+  -- If any binding referenced `$runtime_lazy`, prepend its definition.
+  -- Mirrors `if needRuntimeLazy then [runtimeLazy] : jsDecls else jsDecls`
+  -- at JS.hs:64.
+  let needsRuntimeLazy = Array.any (Array.any usesRuntimeLazy) jsDeclLists
+      jsDeclLists' = if needsRuntimeLazy
+                       then Array.cons [runtimeLazyAST] jsDeclLists
+                       else jsDeclLists
   -- Run AST-level optimizer passes
-  optimized <- optimize (map identToJs exps) jsDeclLists
+  optimized <- optimize (map identToJs exps) jsDeclLists'
   let jsDecls = Array.concat optimized
   let annotated = map annotatePure jsDecls
 
@@ -221,7 +239,67 @@ moduleBindToJs opts mn = bindToJs
   bindToJs (CF.NonRec ann ident val) = do
     js <- nonRecToJS ann ident val
     pure [js]
-  bindToJs (CF.Rec vs) = traverse (\v -> nonRecToJS v.ann v.ident v.expr) vs
+  bindToJs (CF.Rec vs) = do
+    -- Materialise each binding into a CoreImp.AST first so we can inspect it.
+    initAsts <- traverse (\v -> do
+        ast <- nonRecToJS v.ann v.ident v.expr
+        pure { ident: v.ident, ast }) vs
+    let siblingNames = Set.fromFoldable (map (\v -> identToJs v.ident) vs)
+    -- A binding is in `wrapSet` if its initializer eagerly references any
+    -- sibling (i.e. a `Var sibling` not inside a `Function`). These are the
+    -- ones we lazy-wrap with `$runtime_lazy`.
+    let wrapSet = Set.fromFoldable $ Array.mapMaybe (\b -> case b.ast of
+          VariableIntroduction _ name (Just (Tuple _ initExpr))
+            | hasEagerSiblingRef siblingNames initExpr -> Just name
+          _ -> Nothing) initAsts
+    if Set.isEmpty wrapSet
+      then pure (map _.ast initAsts)
+      else do
+        let nonWrapped = Array.filter (\b -> not (Set.member (astName b.ast) wrapSet)) initAsts
+            wrapped = Array.filter (\b -> Set.member (astName b.ast) wrapSet) initAsts
+            -- Inside non-wrapped binding bodies, references to *wrapped*
+            -- siblings need to go through `$lazy_X(0)` because the wrapped
+            -- bindings won't exist yet at any point where a closure body might
+            -- be entered before module-init completes.
+            nonWrappedAsts = map (\b -> rewriteSiblingsExpr wrapSet b.ast) nonWrapped
+            -- Inside wrapped binding init bodies, the same rule applies — refs
+            -- to OTHER wrapped siblings need to be `$lazy_Y(0)`.
+            lazyDecls = map (mkLazyDecl wrapSet mn) wrapped
+            materials = map mkMaterial wrapped
+        pure (nonWrappedAsts <> lazyDecls <> materials)
+    where
+    astName :: AST -> String
+    astName (VariableIntroduction _ n _) = n
+    astName _ = ""
+
+    -- Rewrite sibling refs to wrapped siblings as `$lazy_X(0)` calls,
+    -- preserving the surrounding VariableIntroduction.
+    rewriteSiblingsExpr :: Set.Set String -> AST -> AST
+    rewriteSiblingsExpr wrapSet (VariableIntroduction ss n (Just (Tuple eff e))) =
+      VariableIntroduction ss n (Just (Tuple eff (rewriteSiblingRefs wrapSet e)))
+    rewriteSiblingsExpr _ other = other
+
+    mkLazyDecl :: Set.Set String -> ModuleName -> _ -> AST
+    mkLazyDecl wrapSet modName b = case b.ast of
+      VariableIntroduction ss name (Just (Tuple eff initExpr)) ->
+        VariableIntroduction ss (lazyName name)
+          (Just (Tuple eff
+            (App Nothing (Var Nothing "$runtime_lazy")
+              [ StringLiteral Nothing (mkString (runIdent b.ident))
+              , StringLiteral Nothing (mkString (runModuleName modName))
+              , Function Nothing Nothing []
+                  (Block Nothing [Return Nothing (rewriteSiblingRefs wrapSet initExpr)])
+              ])))
+      other -> other
+
+    mkMaterial :: _ -> AST
+    mkMaterial b = case b.ast of
+      VariableIntroduction _ name (Just (Tuple eff _)) ->
+        VariableIntroduction Nothing name
+          (Just (Tuple eff
+            (App Nothing (Var Nothing (lazyName name))
+              [NumericLiteral Nothing (Left 0)])))
+      other -> other
 
   isTypeClassConstructor :: Ann -> Boolean
   isTypeClassConstructor a = case a.meta of
