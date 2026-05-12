@@ -1,9 +1,33 @@
--- | Transform CoreFn into the simplified imperative AST (CoreImp.AST),
--- | mirroring Language.PureScript.CodeGen.JS.moduleToJs in the Haskell compiler.
+-- | Ports `Language.PureScript.CodeGen.JS` (purescript@c4a35b3,
+-- | src/Language/PureScript/CodeGen/JS.hs). Transforms `CoreFn.Module Ann`
+-- | into `CoreImp.Module`.
 -- |
--- | This is a faithful but not yet exhaustive port. Optimizations and source maps
--- | are deferred — the output is the *pre-optimization* JS that the Haskell
--- | compiler would produce, plus annotatePure markers on top-level values.
+-- | Mapping (PursJS <-> CodeGen/JS.hs line):
+-- |   runModuleToJs / moduleToJs        JS.hs:52-82  (`moduleToJs`)
+-- |   annotatePure / maybePure          JS.hs:89-125
+-- |   pureIife / pureApp                JS.hs:127-131
+-- |   renameImports / freshModuleName   JS.hs:140-157
+-- |   importToJs                        JS.hs:161-164
+-- |   exportsToJs                       JS.hs:168-169
+-- |   reExportsToJs                     JS.hs:173-174
+-- |   moduleImportPath                  JS.hs:176-177
+-- |   walkModule / walkAST              JS.hs:182-187 (`replaceModuleAccessors`)
+-- |   runtimeLazy                       JS.hs:209-229 (not yet ported — Effect module diff)
+-- |   moduleBindToJs / bindToJs         JS.hs:232-247
+-- |   nonRecToJS                        JS.hs:253-261
+-- |   guessEffects                      JS.hs:263-267
+-- |   withPos                           JS.hs:269-274 (we always return js unchanged — no source maps yet)
+-- |   valueToJs / valueToJs'            JS.hs:282-354
+-- |   iife                              JS.hs:356-357
+-- |   literalToValueJS                  JS.hs:359-366
+-- |   extendObj                         JS.hs:369-386
+-- |   varToJs / qualifiedToJS           JS.hs:390-399
+-- |   foreignIdent                      JS.hs:401-402
+-- |   bindersToJs                       JS.hs:406-444
+-- |   binderToJs / binderToJs'          JS.hs:446-481
+-- |   literalToBinderJS                 JS.hs:483-513
+-- |   accessorString                    JS.hs:515-516
+-- |   FFINamespace ("$foreign")         JS.hs:518-519
 module PursJS.CodeGen.JS where
 
 import Prelude
@@ -218,6 +242,9 @@ moduleBindToJs opts mn = bindToJs
     js <- valueToJs val
     pure (VariableIntroduction Nothing (identToJs ident) (Just (Tuple (guessEffects val) js)))
 
+  -- | JS.hs:263-267 — `guessEffects`.
+  -- | Local-let-bound names (BySourcePos) and synthesised applications are
+  -- | known-side-effect-free; everything else conservatively `UnknownEffects`.
   guessEffects :: Expr Ann -> InitializerEffects
   guessEffects (CF.Var _ (Qualified (BySourcePos _) _)) = NoEffects
   guessEffects (CF.App ann _ _) = case ann.meta of
@@ -227,25 +254,37 @@ moduleBindToJs opts mn = bindToJs
 
   -- ===== values =====
 
+  -- | JS.hs:282-285 — `valueToJs`. The Haskell version also wraps the result
+  -- | in `withPos ss` so source maps work; we omit that since we don't emit
+  -- | source maps.
   valueToJs :: Expr Ann -> Supply AST
   valueToJs e = valueToJs' e
 
+  -- | JS.hs:287-354 — `valueToJs'`. One equation per CoreFn `Expr` variant.
   valueToJs' :: Expr Ann -> Supply AST
+  -- JS.hs:288-289 — Literal: defer to literalToValueJS
   valueToJs' (CF.Literal ann l) = literalToValueJS l
+  -- JS.hs:290-293 — Var with IsConstructor meta: dot into `.value` (nullary)
+  -- or `.create` (n-ary). Constructors are emitted as objects with these fields.
   valueToJs' (CF.Var ann name) = case ann.meta of
     Just (CF.IsConstructor _ []) ->
       pure (accessorString (mkString "value") (qualifiedToJS identity name))
     Just (CF.IsConstructor _ _) ->
       pure (accessorString (mkString "create") (qualifiedToJS identity name))
+    -- JS.hs:322-327 — IsForeign: local foreigns become `$foreign.<name>`,
+    -- cross-module foreigns go through the usual qualifiedToJS path.
     Just CF.IsForeign -> case name of
       Qualified (ByModuleName mn') ident
         | mn' == mn -> pure (foreignIdent ident)
         | otherwise -> pure (varToJs name)
       _ -> pure (varToJs name)  -- silently no-op fallback
     _ -> pure (varToJs name)
+  -- JS.hs:294-295 — Accessor: simple property index.
   valueToJs' (CF.Accessor _ prop val) = do
     v <- valueToJs val
     pure (accessorString prop v)
+  -- JS.hs:296-302 — ObjectUpdate: with a known copy-list we lower to a single
+  -- ObjectLiteral; otherwise we fall back to a runtime for..in copy via extendObj.
   valueToJs' (CF.ObjectUpdate _ o copy ps) = do
     obj <- valueToJs o
     sts <- traverse (\(Tuple k v) -> Tuple k <$> valueToJs v) ps
@@ -254,12 +293,18 @@ moduleBindToJs opts mn = bindToJs
       Just names ->
         pure (ObjectLiteral Nothing
                 ((map (\n -> Tuple n (accessorString n obj)) names) <> sts))
+  -- JS.hs:303-308 — Abs: function (arg) { return body; }. UnusedIdent emits
+  -- a zero-arg function so we don't generate a `var $__unused` parameter.
   valueToJs' (CF.Abs _ arg val) = do
     ret <- valueToJs val
     let args = case arg of
                  UnusedIdent -> []
                  _ -> [identToJs arg]
     pure (Function Nothing Nothing args (Block Nothing [Return Nothing ret]))
+  -- JS.hs:309-321 — App: curried function application. We collect the
+  -- arg-spine with unApp, then either lower a fully-saturated constructor to
+  -- `new C(args)`, drop a newtype constructor application to its sole arg, or
+  -- emit a chain of `App fn [arg]` calls otherwise.
   valueToJs' eApp@(CF.App _ _ _) = do
     let { f, args } = unApp eApp []
     args' <- traverse valueToJs args
@@ -276,15 +321,20 @@ moduleBindToJs opts mn = bindToJs
       _ -> do
         fJs <- valueToJs f
         pure (foldl curryApp fJs args')
+  -- JS.hs:329-331 — Case: defer to bindersToJs with the scrutinees.
   valueToJs' (CF.Case ann values binders) = do
     vals <- traverse valueToJs values
     bindersToJs ann.ss binders vals
+  -- JS.hs:332-335 — Let: emit an IIFE with the bindings followed by a return.
   valueToJs' (CF.Let _ ds val) = do
     declsArr <- Array.concat <$> traverse bindToJs ds
     ret <- valueToJs val
     pure (App Nothing
             (Function Nothing Nothing [] (Block Nothing (declsArr <> [Return Nothing ret])))
             [])
+  -- JS.hs:336-344 — Constructor with no fields: emit an IIFE that builds a
+  -- single-instance object. Newtype constructors take the IsNewtype short-cut:
+  -- `var T = { create: function (value) { return value; } }`.
   valueToJs' (CF.Constructor ann _ ctor []) = case ann.meta of
     Just CF.IsNewtype ->
       pure (VariableIntroduction Nothing (properToJs ctor) (Just (Tuple UnknownEffects

@@ -1,5 +1,26 @@
--- | Dead-code removal: unreachable statements after return, undefined argument
--- | of an effectful application, unreferenced top-level effect-free bindings.
+-- | Ports `Language.PureScript.CoreImp.Optimizer.Unused` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Optimizer/Unused.hs).
+-- |
+-- | Three independent dead-code passes:
+-- |
+-- |   - removeCodeAfterReturnStatements: drop everything after a `return ...`
+-- |     inside a block (it's unreachable). Used to clean up the case-IIFE
+-- |     bodies where the codegen emits a trailing `throw "Failed pattern match"`
+-- |     after a `return`.
+-- |
+-- |   - removeUndefinedApp: `f(undefined)`  →  `f()`. Used for the
+-- |     unsafePartial-inlining path (we pass undefined as the proof and rely on
+-- |     this to clean it up).
+-- |
+-- |   - removeUnusedEffectFreeVars: drop top-level `var x = ...` whose value is
+-- |     marked NoEffects and whose name nothing references. Runs to fixed point.
+-- |     This is what removes the dictionary helper bindings the inliner has
+-- |     replaced everywhere.
+-- |
+-- | Mapping (PursJS <-> Unused.hs line):
+-- |   removeCodeAfterReturnStatements   Unused.hs:19-30
+-- |   removeUndefinedApp                Unused.hs:32-36
+-- |   removeUnusedEffectFreeVars        Unused.hs:38-52
 module PursJS.CoreImp.Optimizer.Unused
   ( removeCodeAfterReturnStatements
   , removeUndefinedApp

@@ -1,6 +1,19 @@
--- | Type-class-dictionary-aware inliners. After these passes run, calls
--- | like `Data_Semiring.add(semiringInt)(x)(y)` are rewritten as
--- | `(x + y) | 0`, `Data_Eq.eq(eqString)(x)(y)` as `x === y`, etc.
+-- | Second half of `Language.PureScript.CoreImp.Optimizer.Inliner`
+-- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer/Inliner.hs).
+-- | These are the type-class-dictionary-aware passes — after they run, calls
+-- | like `Data_Semiring.add(semiringInt)(x)(y)` become `(x + y) | 0`,
+-- | `Data_Eq.eq(eqString)(x)(y)` becomes `x === y`, etc.
+-- |
+-- | Mapping (PursJS <-> Inliner.hs line):
+-- |   buildExpander             Optimizer.hs:80-85
+-- |   inlineCommonValues        Inliner.hs:87-103
+-- |   inlineCommonOperators     Inliner.hs:105-166 (with the `binary` / `unary` helpers Inliner.hs:168-187)
+-- |   inlineFnIdentity          Inliner.hs:276-281
+-- |   inlineUnsafeCoerce        Inliner.hs:283-286
+-- |
+-- | NOT yet ported from Inliner.hs: `binary'`, `unary'` (bitwise-ops on Ints
+-- | without dict — Data.Int.Bits style), `mkFn`/`runFn`/`mkEffFn`/`runEffFn`
+-- | (Data.Function.Uncurried / Effect.Uncurried), `inlineUnsafePartial`.
 module PursJS.CoreImp.Optimizer.Inliner2
   ( buildExpander
   , inlineCommonValues

@@ -1,8 +1,11 @@
--- | Tail-call elimination. Rewrites a tail-recursive top-level binding
+-- | Ports `Language.PureScript.CoreImp.Optimizer.TCO`
+-- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer/TCO.hs).
+-- |
+-- | Rewrites a tail-recursive binding
 -- |
 -- |   var spin = function (v) { return spin(v); };
 -- |
--- | into a `$tco_loop` while loop:
+-- | into a `$tco_loop` while-loop:
 -- |
 -- |   var spin = function ($copy_v) {
 -- |       var $tco_var_v = $copy_v;
@@ -18,8 +21,34 @@
 -- |       return $tco_result;
 -- |   };
 -- |
--- | Mirrors `Language.PureScript.CoreImp.Optimizer.TCO.tco` for the
--- | single-function recursion case (no mutual-recursion yet).
+-- | The State Int monad tracks how many `$tco_done` we've already issued, so
+-- | nested TCO transforms get `$tco_done`, `$tco_done1`, `$tco_done2`, ...
+-- | (matching `tcoDoneM` in TCO.hs).
+-- |
+-- | Mapping (PursJS <-> TCO.hs line):
+-- |   tco / convert             TCO.hs:17-46
+-- |   tcoVar / copyVar          TCO.hs:19-23
+-- |   tcoDoneM / bumpDone       TCO.hs:25-27
+-- |   tcoLoopName               TCO.hs:29-30
+-- |   tcoResultName             TCO.hs:32-33
+-- |   rewriteFunctionsWith / collectAllFunctionArgs
+-- |                             TCO.hs:48-59
+-- |   topCollectAllFunctionArgs TCO.hs:61-62 (argMapper = copyVar)
+-- |   innerCollectAllFunctionArgs TCO.hs:64-65 (argMapper = id)
+-- |   countReferences           TCO.hs:67-71
+-- |   findTailRecursiveFns      TCO.hs:73-87
+-- |   findTailPositionDeps      TCO.hs:89-127
+-- |   foldMapA                  TCO.hs:190-191
+-- |   isSelfCall                TCO.hs:185-188
+-- |   toLoop                    TCO.hs:129-172
+-- |   loopify                   TCO.hs:138-161
+-- |   collectArgs               TCO.hs:176-178
+-- |   isIndirectSelfCall        TCO.hs:180-183
+-- |
+-- | We currently handle the single-function tail-recursion case. The Haskell
+-- | also recursively detects mutually-tail-recursive groups via the worklist
+-- | in `findTailRecursiveFns` — we ported that worklist but the rewriter only
+-- | looks at the outermost binding right now.
 module PursJS.CoreImp.Optimizer.TCO
   ( tco
   ) where

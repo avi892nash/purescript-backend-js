@@ -1,4 +1,9 @@
--- | Block-flattening optimizer passes.
+-- | Ports `Language.PureScript.CoreImp.Optimizer.Blocks` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Optimizer/Blocks.hs).
+-- |
+-- | Mapping (PursJS <-> Blocks.hs line):
+-- |   collapseNestedBlocks         Blocks.hs:12-20
+-- |   collapseNestedIfs            Blocks.hs:22-28
 module PursJS.CoreImp.Optimizer.Blocks
   ( collapseNestedBlocks
   , collapseNestedIfs

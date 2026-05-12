@@ -1,9 +1,24 @@
--- | Inline `compose` / `composeFlipped` for plain functions.
+-- | Ports `inlineFnComposition` from
+-- | `Language.PureScript.CoreImp.Optimizer.Inliner` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Optimizer/Inliner.hs:248-274).
 -- |
--- |   (f <<< g) x  →  f (g x)
--- |   (f <<< g)    →  function ($0) { return f(g($0)); }
+-- | The only monadic optimizer pass — it uses `freshName` to coin a binder
+-- | for the lambda parameter when partially-applied compose is eta-expanded.
 -- |
--- | Mirrors `inlineFnComposition` in `Language.PureScript.CoreImp.Optimizer.Inliner`.
+-- |   (f <<< g) x  →  f (g x)                              (saturated form)
+-- |   (f <<< g)    →  function ($N) { return f(g($N)); }   (eta form)
+-- |
+-- | In a multi-level compose like `(f <<< g <<< h) x`, the algorithm walks down
+-- | left-associated compose calls in `goApps` and reconstructs the nested
+-- | application chain in `mkApps`. The Haskell uses view-pattern matching with
+-- | the `expander` arrow; here we lift that into explicit `case ... of` steps
+-- | via the `isComposeAppliedToFnDict` helper.
+-- |
+-- | Mapping (PursJS <-> Inliner.hs line):
+-- |   inlineFnComposition       Inliner.hs:248-257
+-- |   mkApps                    Inliner.hs:259-264
+-- |   mkApp                     Inliner.hs:266-267
+-- |   goApps                    Inliner.hs:269-274
 module PursJS.CoreImp.Optimizer.FnComposition
   ( inlineFnComposition
   ) where

@@ -1,6 +1,15 @@
--- | Generic AST traversals: `everywhere`, `everything`, `everywhereTopDown`.
--- | Mirrors `Language.PureScript.CoreImp.AST.everywhere` etc. in the Haskell
--- | compiler.
+-- | Generic AST traversals — ported from the bottom half of
+-- | `Language.PureScript.CoreImp.AST` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/AST.hs:172-243).
+-- |
+-- | Split out of `PursJS.CoreImp.AST` so the data types and the traversals
+-- | live in separate files; the Haskell compiler keeps them together.
+-- |
+-- | Mapping (PursJS <-> CoreImp/AST.hs line):
+-- |   everywhere               AST.hs:172-193
+-- |   everywhereTopDown        AST.hs:195-196  (Haskell defines via `everywhereTopDownM (Identity . f)`)
+-- |   everywhereTopDownM       AST.hs:198-219
+-- |   everything               AST.hs:221-243
 module PursJS.CoreImp.Traversals where
 
 import Prelude

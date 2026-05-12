@@ -1,10 +1,33 @@
--- | Pretty-printer for the CoreImp.AST module. Produces JavaScript text that
--- | should exactly match the output of Language.PureScript.CodeGen.JS.Printer
--- | in the Haskell compiler.
+-- | Ports `Language.PureScript.CodeGen.JS.Printer` (purescript@c4a35b3,
+-- | src/Language/PureScript/CodeGen/JS/Printer.hs).
 -- |
--- | The Haskell printer uses `pattern-arrows` for operator-precedence-aware
--- | layout; we implement the equivalent recursive printer with explicit
--- | precedence handling here.
+-- | The Haskell version uses the `pattern-arrows` library to express the
+-- | operator-precedence table declaratively (see `operators` in Printer.hs:276-310).
+-- | Here we implement the equivalent recursive printer with explicit precedence
+-- | levels (`pLowest`..`pAtom`) and `wrapParens` checks. The numeric levels are
+-- | chosen so the *order* of the levels in pattern-arrows' `OperatorTable` is
+-- | preserved (lowest precedence first).
+-- |
+-- | Mapping (PursJS <-> Printer.hs line):
+-- |   prettyPrintModule / prettyModule  Printer.hs:252-258
+-- |   prettyPrintJS                     Printer.hs:266-267
+-- |   renderStatements / prettyStatements
+-- |                                     Printer.hs:246-250
+-- |   renderImport / prettyImport       Printer.hs:158-161
+-- |   renderExport / prettyExport       Printer.hs:163-182
+-- |   renderComment / comment           Printer.hs:130-156
+-- |   render (Block/Function/...)       Printer.hs:31-128 (`match` / `match'`)
+-- |   accessor pattern                  Printer.hs:184-191
+-- |   indexer pattern                   Printer.hs:193-197
+-- |   precedence table                  Printer.hs:276-310 (`operators`)
+-- |
+-- | The operator precedence levels in pattern-arrows are layered as
+-- |   1. indexer        2. accessor      3. app            4. new
+-- |   5. lambda         6. unary (!,~,+,-)   7. * / %
+-- |   8. + -            9. << >> >>>     10. < <= > >= instanceof
+-- |   11. === !==       12. &            13. ^
+-- |   14. |             15. &&           16. ||
+-- | (atoms above 1, lowest below 16). We invert: higher number = tighter bind.
 module PursJS.CodeGen.Printer
   ( prettyPrintJS
   , prettyPrintModule
@@ -334,17 +357,50 @@ renderBinaryL :: Indent -> Prec -> String -> AST -> AST -> String
 renderBinaryL ind p op a b =
   renderExpr p ind a <> " " <> op <> " " <> renderExpr (p + 1) ind b
 
--- | Show a Number such that it round-trips through JS.
--- | Haskell's `show :: Double -> String` produces e.g. "1.0" for 1.
--- | JavaScript's default for `1.0` is `"1"`. Match Haskell:
+-- | Show a Number matching Haskell's `Show Double` instance, which the
+-- | Haskell printer uses (Printer.hs:38 — `T.pack $ either show show n`).
+-- |
+-- | Haskell's `show :: Double -> String` uses `Numeric.showFloat` with the
+-- | "generic" format:
+-- |
+-- |   if 0.1 <= |n| < 1e7   → fixed format with at least one digit after `.`
+-- |   otherwise              → exponential `mantissa<e|E>exp`
+-- |
+-- | JS's `Number.prototype.toString()` follows a different threshold
+-- | (1e-7..1e21), so we replicate the Haskell rule explicitly here.
 showNumber :: Number -> String
 showNumber n =
-  -- Use Data.Number.Format.toString which mimics show for Double in Haskell.
-  let s = Num.toString n
+  let absN = if n < 0.0 then -n else n
   in
-    if Str.contains (Str.Pattern ".") s || Str.contains (Str.Pattern "e") s || Str.contains (Str.Pattern "E") s
-      then s
-      else s <> ".0"
+    if n /= n then "NaN"
+    else if n == 0.0 then "0.0"
+    else if absN >= 0.1 && absN < 1.0e7 then ensureDecimal (Num.toString n)
+    else formatExponential n
+
+ensureDecimal :: String -> String
+ensureDecimal s =
+  if Str.contains (Str.Pattern ".") s || Str.contains (Str.Pattern "e") s
+    then s
+    else s <> ".0"
+
+-- | Format `n` as `<mantissa>e<exp>`, where mantissa has at least one digit
+-- | after the decimal point and exp has no leading `+` (matches Haskell's
+-- | `showEFloat`).
+foreign import _toExponential :: Number -> String
+
+formatExponential :: Number -> String
+formatExponential n =
+  let raw = _toExponential n          -- e.g. "1e+10" or "1.5e-7"
+      -- Split mantissa and exponent
+      parts = Str.split (Str.Pattern "e") raw
+  in case parts of
+       [mant, exp_] ->
+         let mant' = if Str.contains (Str.Pattern ".") mant then mant else mant <> ".0"
+             exp' = case Str.stripPrefix (Str.Pattern "+") exp_ of
+               Just rest -> rest
+               Nothing -> exp_
+         in mant' <> "e" <> exp'
+       _ -> raw  -- shouldn't happen
 
 -- ===== object property keys =====
 

@@ -1,6 +1,16 @@
--- | CLI: read a corefn.json file, transform it, and print the generated JS to
--- | stdout. Usage:
--- |   pursjs <path-to-corefn.json> [--no-comments]
+-- | CLI driver. Reads a corefn.json file, runs the codegen pipeline, and
+-- | prints the resulting JavaScript to stdout.
+-- |
+-- | This is the analogue of `Language.PureScript.Make.Actions.ssCodegen`
+-- | (src/Language/PureScript/Make/Actions.hs:230-280) — the part that takes
+-- | the CoreFn `Module Ann`, calls `J.moduleToJs`, runs `prettyPrintJS`, and
+-- | writes the result.
+-- |
+-- | Usage:
+-- |   pursjs <path-to-corefn.json> [--with-comments]
+-- |
+-- | The default is `--no-comments` to match `purs compile`'s default
+-- | (Actions.hs:269-273: comments only emitted when `--comments` is passed).
 module PursJS.Main where
 
 import Prelude

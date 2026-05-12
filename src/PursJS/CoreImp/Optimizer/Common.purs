@@ -1,4 +1,21 @@
--- | Helpers used by the various optimizer phases.
+-- | Ports `Language.PureScript.CoreImp.Optimizer.Common` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Optimizer/Common.hs).
+-- |
+-- | Variable-rewriting and structural helpers shared across optimizer passes.
+-- |
+-- | Mapping (PursJS <-> Common.hs line):
+-- |   applyAll                  Common.hs:15-16
+-- |   replaceIdent              Common.hs:18-22
+-- |   replaceIdents             Common.hs:24-28
+-- |   isReassigned              Common.hs:30-39
+-- |   isRebound                 Common.hs:41-45
+-- |   targetVariable            Common.hs:47-50
+-- |   isUpdated                 Common.hs:52-57
+-- |   removeFromBlock           Common.hs:59-61
+-- |
+-- | The `Ref` pattern synonym at Common.hs:63-72 is realised here as the
+-- | `isRef` helper in each optimizer pass that needs it (e.g. Inliner2,
+-- | FnComposition, MagicDo).
 module PursJS.CoreImp.Optimizer.Common where
 
 import Prelude

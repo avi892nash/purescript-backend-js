@@ -1,5 +1,25 @@
--- | Name mangling, JS reserved words, JS built-ins. Mirrors
--- | Language.PureScript.CodeGen.JS.Common in the Haskell compiler.
+-- | Ports `Language.PureScript.CodeGen.JS.Common` (purescript@c4a35b3,
+-- | src/Language/PureScript/CodeGen/JS/Common.hs).
+-- |
+-- | All PureScript-identifier-to-JS-identifier escaping logic, plus the
+-- | hardcoded lists of JS reserved words and built-in globals.
+-- |
+-- | Mapping (PursJS <-> Common.hs line):
+-- |   moduleNameToJs           Common.hs:13-16
+-- |   identToJs                Common.hs:24-31
+-- |   properToJs               Common.hs:38-39
+-- |   anyNameToJs              Common.hs:47-50
+-- |   isValidJsIdentifier      Common.hs:57-61
+-- |   identCharToText          Common.hs:65-89
+-- |   nameIsJsReserved         Common.hs:92-94
+-- |   nameIsJsBuiltIn          Common.hs:97-153
+-- |   jsAnyReserved            Common.hs:155-164
+-- |   jsKeywords               Common.hs:166-200
+-- |   jsSometimesReserved      Common.hs:202-208
+-- |   jsFutureReserved         Common.hs:210-212
+-- |   jsFutureReservedStrict   Common.hs:214-222
+-- |   jsOldReserved            Common.hs:224-242
+-- |   jsLiterals               Common.hs:244-249
 module PursJS.CodeGen.Common where
 
 import Prelude

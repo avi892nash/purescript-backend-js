@@ -1,6 +1,17 @@
--- | Basic AST-level inlining passes that don't require knowledge of specific
--- | type class dictionaries. Mirrors `Language.PureScript.CoreImp.Optimizer.Inliner`
--- | for the subset we currently need.
+-- | First half of `Language.PureScript.CoreImp.Optimizer.Inliner`
+-- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer/Inliner.hs).
+-- |
+-- | These passes are AST-shape-only (don't look at module/dict identifiers);
+-- | the type-class-aware ones live in `PursJS.CoreImp.Optimizer.Inliner2`,
+-- | and `inlineFnComposition` (the only monadic pass) is in
+-- | `PursJS.CoreImp.Optimizer.FnComposition`.
+-- |
+-- | Mapping (PursJS <-> Inliner.hs line):
+-- |   shouldInline              Inliner.hs:36-43
+-- |   etaConvert                Inliner.hs:45-55
+-- |   unThunk                   Inliner.hs:57-66
+-- |   evaluateIifes             Inliner.hs:68-75
+-- |   inlineVariables           Inliner.hs:77-85
 module PursJS.CoreImp.Optimizer.Inliner
   ( shouldInline
   , etaConvert

@@ -1,6 +1,35 @@
--- | The (ModuleName, PSString) pairs the inliner pattern-matches against.
--- | Mirrors the TH-generated `P_*` constants in
--- | `Language.PureScript.Constants.Libs`.
+-- | The `(ModuleName, PSString)` pairs the inliner pattern-matches against.
+-- |
+-- | In the Haskell compiler these constants are TH-generated via the EDSL in
+-- | `Language.PureScript.Constants.Libs` (purescript@c4a35b3,
+-- | src/Language/PureScript/Constants/Libs.hs). The TH expands something like
+-- | `TH.mod "Data.Semiring" (TH.vars ["add","mul","one","zero"])` into top-level
+-- | `P_add :: (ModuleName, PSString)`, `P_mul :: ...`, etc.
+-- |
+-- | Mapping (PursJS <-> Libs.hs section):
+-- |   p_add/p_mul/p_one/p_zero/p_semiringInt/p_semiringNumber
+-- |                              Libs.hs:160-165 (Data.Semiring block)
+-- |   p_sub/p_negate/p_ringInt/p_ringNumber
+-- |                              Libs.hs (Data.Ring block; mod "Data.Ring")
+-- |   p_div/p_euclideanRingNumber
+-- |                              Libs.hs (Data.EuclideanRing block)
+-- |   p_eq/p_notEq/p_eq*         Libs.hs (Data.Eq block)
+-- |   p_lessThan/...             Libs.hs (Data.Ord block)
+-- |   p_append/p_semigroupString Libs.hs:152-158 (Data.Semigroup block)
+-- |   p_conj/p_disj/p_not/p_heytingAlgebraBoolean
+-- |                              Libs.hs (Data.HeytingAlgebra block)
+-- |   p_top/p_bottom/p_boundedBoolean
+-- |                              Libs.hs (Data.Bounded block)
+-- |   p_compose/p_composeFlipped/p_semigroupoidFn
+-- |                              Libs.hs (Control.Semigroupoid block)
+-- |   p_identity/p_categoryFn    Libs.hs (Control.Category block)
+-- |   p_unsafeCoerce/p_unsafePartial
+-- |                              Libs.hs (Unsafe.Coerce / Partial.Unsafe blocks)
+-- |   p_bind/p_discard/p_discardUnit
+-- |                              Libs.hs (Control.Bind block)
+-- |   p_pure                     Libs.hs (Control.Applicative block)
+-- |   p_bindEffect/p_applicativeEffect
+-- |                              Libs.hs (Effect block) — for magicDoEffect
 module PursJS.CoreImp.Optimizer.Constants where
 
 import Data.Tuple (Tuple(..))

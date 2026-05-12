@@ -1,3 +1,19 @@
+-- | Ports `Language.PureScript.CoreImp.AST` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/AST.hs).
+-- |
+-- | The "simplified imperative" JS AST that sits between CoreFn and the
+-- | pretty printer. Every JavaScript construct the codegen needs to emit has
+-- | a constructor here.
+-- |
+-- | Mapping (PursJS <-> CoreImp/AST.hs line):
+-- |   UnaryOperator             AST.hs:17-23
+-- |   BinaryOperator            AST.hs:26-46
+-- |   CIComments                AST.hs:50-53
+-- |   InitializerEffects        AST.hs:59
+-- |   AST                       AST.hs:62-111
+-- |
+-- | The `everywhere` / `everything` / `everywhereTopDown` / `everywhereTopDownM`
+-- | traversals from AST.hs:172-243 are in `PursJS.CoreImp.Traversals`.
 module PursJS.CoreImp.AST where
 
 import Prelude

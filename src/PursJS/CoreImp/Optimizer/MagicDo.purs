@@ -1,9 +1,39 @@
--- | The "Magic Do" optimization. Inlines `bind`, `pure`, and `discard` for the
--- | `Effect` monad into a single `function __do() { ... }` body, mirroring
--- | `magicDoEffect` in `Language.PureScript.CoreImp.Optimizer.MagicDo`.
+-- | Ports `magicDoEffect` from `Language.PureScript.CoreImp.Optimizer.MagicDo`
+-- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer/MagicDo.hs).
 -- |
--- | Currently implements `magicDoEffect` only (not `magicDoEff` for the legacy
--- | `Eff` monad, and not `magicDoST` for `ST`).
+-- | Inlines monomorphic `bind`/`discard`/`pure` for the `Effect` monad into a
+-- | single `function __do() { ... }` block, so that a chain of `>>=` calls
+-- | compiles into a flat sequence of effectful statements.
+-- |
+-- | Example transform:
+-- |
+-- |   bind(bindEffect)(eff1)(function (x) {
+-- |     return discard(bindEffect)(eff2)(function () {
+-- |       return pure(applicativeEffect)(x);
+-- |     });
+-- |   })
+-- |
+-- |   →
+-- |
+-- |   function __do() {
+-- |     var x = eff1();
+-- |     eff2();
+-- |     return x;
+-- |   }
+-- |
+-- | Mapping (PursJS <-> MagicDo.hs line):
+-- |   magicDoEffect             MagicDo.hs:33-34 (specialised at C.M_Effect)
+-- |   magicDo (the worker)      MagicDo.hs:39-69 (we inline the worker into magicDoEffect)
+-- |   isPure                    MagicDo.hs:47, 77-78
+-- |   isDiscard                 MagicDo.hs:49-50, 74-75
+-- |   isBind (wildcard variant) MagicDo.hs:52-54, 71-72
+-- |   isBind (named variant)    MagicDo.hs:56-57
+-- |   untilE / whileE rewrites  MagicDo.hs:59-63 (NOT YET ported — not exercised by the prelude+effect+console set)
+-- |   __do inlining             MagicDo.hs:65, 67-68
+-- |   applyReturns              MagicDo.hs:83-90
+-- |
+-- | NOT yet ported: `magicDoEff` (legacy Eff monad), `magicDoST` (ST monad),
+-- | `inlineST` (the bigger ST-ref rewriting transform).
 module PursJS.CoreImp.Optimizer.MagicDo
   ( magicDoEffect
   ) where

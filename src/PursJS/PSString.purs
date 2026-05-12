@@ -1,6 +1,17 @@
--- | Simplified PSString. PureScript source has it as [Word16] (UTF-16 code units).
--- | For our codegen, we represent it as a String. JS strings are already UTF-16
--- | internally, so toCharCode on each char gives us the code unit.
+-- | Ports `Language.PureScript.PSString` (purescript@c4a35b3,
+-- | src/Language/PureScript/PSString.hs).
+-- |
+-- | The Haskell representation is `[Word16]` (a list of UTF-16 code units).
+-- | Here we use `String`, which is already UTF-16 internally in JavaScript,
+-- | so `toCharCode` on each Char gives us the code unit.
+-- |
+-- | Mapping (PursJS <-> PSString.hs line):
+-- |   PSString                  PSString.hs:51        (`newtype PSString { toUTF16CodeUnits :: [Word16] }`)
+-- |   mkString                  PSString.hs:239-240
+-- |   decodeString              PSString.hs:99-100
+-- |   prettyPrintStringJS       PSString.hs:200-219
+-- |   encodeCodeUnit            PSString.hs:203-214 (the `encodeChar` helper)
+-- |   showHexPad / showHex      PSString.hs:216-219 (`showHex'`)
 module PursJS.PSString where
 
 import Prelude

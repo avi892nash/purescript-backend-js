@@ -1,8 +1,26 @@
--- | Parse a corefn.json file into the CoreFn AST.
+-- | Ports `Language.PureScript.CoreFn.FromJSON` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreFn/FromJSON.hs).
 -- |
--- | The JSON shape produced by `purs --codegen corefn` is documented by example
--- | in the Haskell module Language.PureScript.CoreFn.ToJSON; here we read it
--- | directly using argonaut-core's Json type.
+-- | The JSON shape is the one emitted by `Language.PureScript.CoreFn.ToJSON`.
+-- | We parse via argonaut-core's `Json` type (the Haskell uses aeson's `Value`).
+-- |
+-- | Mapping (PursJS <-> FromJSON.hs line):
+-- |   parseModule                FromJSON.hs:130-144 (`moduleFromJSON`)
+-- |   importFromJson             FromJSON.hs:152-157
+-- |   reExportsFromJson          FromJSON.hs:159-160
+-- |   annFromJson                FromJSON.hs:67-73
+-- |   sourceSpanFromJson         FromJSON.hs:75-79
+-- |   metaFromJson               FromJSON.hs:45-65
+-- |   constructorTypeFromJson    FromJSON.hs:37-43
+-- |   identFromJson              FromJSON.hs:105-108
+-- |   properNameFromJson         FromJSON.hs:110-111
+-- |   moduleNameFromJson         FromJSON.hs:127-128
+-- |   qualifiedFromJson          FromJSON.hs:113-125
+-- |   literalFromJson            FromJSON.hs:81-103
+-- |   exprFromJson               FromJSON.hs:188-257
+-- |   bindFromJson               FromJSON.hs:162-178
+-- |   caseAltFromJson            FromJSON.hs:259-278
+-- |   binderFromJson             FromJSON.hs:280-319
 module PursJS.CoreFn.FromJSON where
 
 import Prelude

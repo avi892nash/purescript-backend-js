@@ -1,3 +1,13 @@
+-- | Ports `Language.PureScript.CoreImp.Module` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Module.hs).
+-- |
+-- | The wrapper that adds ES-module imports, exports, and header comments
+-- | around the body ASTs.
+-- |
+-- | Mapping (PursJS <-> CoreImp/Module.hs line):
+-- |   Module (record)           Module.hs:10-15   (Haskell: data Module = Module { modHeader, modImports, modBody, modExports })
+-- |   Import                    Module.hs:17      (`data Import = Import Text PSString`)
+-- |   Export                    Module.hs:19      (`data Export = Export (NonEmpty Text) (Maybe PSString)`)
 module PursJS.CoreImp.Module where
 
 import Data.List.NonEmpty (NonEmptyList)

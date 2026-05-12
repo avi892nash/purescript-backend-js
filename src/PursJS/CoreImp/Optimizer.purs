@@ -1,4 +1,27 @@
--- | Top-level optimizer pipeline. Mirrors `Language.PureScript.CoreImp.Optimizer.optimize`.
+-- | Top-level optimizer pipeline. Ports `Language.PureScript.CoreImp.Optimizer.optimize`
+-- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer.hs:36-62).
+-- |
+-- | Order of passes (matches Optimizer.hs `optimize` exactly):
+-- |
+-- |   1. for each AST in each decl, run to fixed point:
+-- |        inlineFnComposition (monadic)
+-- |       ∘ inlineFnIdentity
+-- |       ∘ inlineUnsafeCoerce
+-- |       ∘ tidyUp
+-- |       ∘ applyAll [inlineCommonValues, inlineCommonOperators]
+-- |
+-- |   2. for each AST, run to fixed point: magicDoEffect
+-- |      (We don't yet port magicDoEff or magicDoST / inlineST.)
+-- |
+-- |   3. for each AST: tco then a final tidyUp pass.
+-- |
+-- |   4. removeUnusedEffectFreeVars on the whole module.
+-- |
+-- | Mapping (PursJS <-> Optimizer.hs line):
+-- |   optimize                  Optimizer.hs:36-48
+-- |   tidyUp                    Optimizer.hs:50-60
+-- |   buildExpander             Optimizer.hs:80-85  (in PursJS.CoreImp.Optimizer.Inliner2)
+-- |   untilFixedPoint           Optimizer.hs:64-69  (we use a 32-iteration cap because AST has no Eq)
 module PursJS.CoreImp.Optimizer
   ( optimize
   ) where
