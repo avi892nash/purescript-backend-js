@@ -143,8 +143,8 @@ echo "  Codegen err:  $codegen_fail"
 echo "  Runtime err:  $runtime_fail"
 echo "  Purs err:     $purs_fail (test setup/dep issue, not our codegen)"
 
-if [ "${VERBOSE:-0}" = "1" ] && [ ${#errored[@]} -gt 0 ]; then
+if [ ${#errored[@]} -gt 0 ]; then
   echo ""
-  echo "Failures (first 20):"
-  for e in "${errored[@]:0:20}"; do echo "  $e"; done
+  echo "Per-test issues:"
+  for e in "${errored[@]}"; do echo "  $e"; done
 fi

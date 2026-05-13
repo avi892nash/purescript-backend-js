@@ -55,36 +55,44 @@ spago run --main PursJS.Main -- ./sample-purs/output_ref/Simple/corefn.json
 VERBOSE=1 ./bin/diff-codegen.sh
 ```
 
-## Running the upstream optimizer test suite
+## Running the upstream test suites
 
-The purescript Haskell repo has 10 golden tests under
+The purescript Haskell repo has three categories of tests we replicate:
+
+### 1. Optimize golden tests (10 tests)
+
 `tests/purs/optimize/*.{purs,out.js}` — each compiles a small program and
-diffs against an expected JS output. We mirror these in
-`tests/upstream-optimize/` and run them via `bin/run-upstream-tests.sh`:
+diffs against an expected JS output. Mirror in `tests/upstream-optimize/`,
+run via `bin/run-upstream-tests.sh`:
 
 ```bash
-# Run against the locally checked-in copies
 ./bin/run-upstream-tests.sh
+# → 8 pass, 2 differ, 0 errored
 
-# Output:
-# OK   2866
-# DIFF 4179
-# OK   4229
-# OK   4386
-# OK   Foreign
-# OK   Monad
-# DIFF ObjectUpdate
-# OK   Primitives
-# OK   RecursiveInstances
-# OK   Symbols
-# Upstream optimizer tests: 8 pass, 2 differ, 0 errored
-
-# Pull latest from upstream, then run
-UPDATE_FROM_UPSTREAM=1 ./bin/run-upstream-tests.sh
-
-# Normalize $N fresh-name numbering
 SEMANTIC=1 ./bin/run-upstream-tests.sh
 # → 9 pass, 1 differ, 0 errored
+
+UPDATE_FROM_UPSTREAM=1 ./bin/run-upstream-tests.sh   # pull latest, then run
+```
+
+### 2. Passing tests (439 tests)
+
+`tests/purs/passing/*.purs` — each is a full PureScript program ending in
+`main = log "Done"`. The upstream Haskell runner (`TestCompiler.hs::passingTests`)
+compiles each, runs `node`, and expects the last stdout line to be `Done`.
+`bin/run-passing-tests.sh` does the same but plugs in our codegen for the
+`Main` module.
+
+```bash
+# Run all 439
+./bin/run-passing-tests.sh
+
+# Run a subset
+LIMIT=50 ./bin/run-passing-tests.sh
+PATTERN=11 ./bin/run-passing-tests.sh    # only tests with '11' in their name
+
+# Show stderr/stdout on failures
+VERBOSE=1 ./bin/run-passing-tests.sh
 ```
 
 ## Status
