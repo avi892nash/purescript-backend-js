@@ -155,8 +155,11 @@ SEMANTIC=1 ./bin/diff-codegen.sh   # 71/71 semantic match
 
 - [LEARN.md](LEARN.md) — CoreFn-to-JS mapping in detail, every expression
   variant explained with source / corefn / output triplets.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Pipeline block diagram +
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Codegen pipeline block diagram +
   every decision-point and divergence from Haskell.
+- [docs/TESTING.md](docs/TESTING.md) — Test-infrastructure block diagram +
+  per-runner flow for all four scripts (`diff-codegen.sh`,
+  `run-upstream-tests.sh`, `run-passing-tests.sh`, `test-runtime.sh`).
 - [tests/upstream-optimize/README.md](tests/upstream-optimize/README.md) — What
   each of the 10 upstream optimize tests exercises.
 - The upstream Haskell sources cloned at `/Users/avinashverma/purescript/`
