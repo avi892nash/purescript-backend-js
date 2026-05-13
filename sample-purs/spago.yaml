@@ -1,16 +1,31 @@
 package:
   name: sample-purs
   dependencies:
+    - arrays
+    - assert
     - console
+    - distributive
     - effect
+    - enums
+    - foldable-traversable
+    - functions
+    - gen
     - identity
+    - integers
+    - lazy
+    - lists
     - maybe
+    - nonempty
+    - numbers
     - partial
     - prelude
+    - psci-support
     - st
+    - strings
     - tailrec
     - type-equality
     - typelevel-prelude
+    - unfoldable
   test:
     main: Test.Main
     dependencies: []

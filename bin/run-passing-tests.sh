@@ -108,15 +108,31 @@ for purs in "$TESTS_DIR"/*.purs; do
     continue
   fi
 
-  # Generate Main/index.js with OUR codegen
-  if ! node --input-type=module -e "
+  # Generate Main/index.js with OUR codegen, with a 60s watchdog so that
+  # pathological cases (BigFunction.purs has a 9MB corefn that we'd churn
+  # on for hours) get cut off and reported as a timeout. `set +e` around
+  # this block because the kill/wait sequence is naturally exit-code-noisy
+  # when the foreground command finishes normally.
+  set +e
+  node --input-type=module -e "
 import { main } from '$PROJECT/output/PursJS.Main/index.js';
 process.argv = [process.argv[0], 'main', '$corefn'];
 main();
-" > "$workdir/output/Main/index.js" 2>/tmp/codegen.err; then
-    [ "${VERBOSE:-0}" = "1" ] && { echo "CODEGEN FAIL $name"; cat /tmp/codegen.err; }
+" > "$workdir/output/Main/index.js" 2>/tmp/codegen.err &
+  CGPID=$!
+  ( sleep 60 && kill -9 $CGPID 2>/dev/null ) &
+  WDPID=$!
+  wait $CGPID
+  CGRC=$?
+  kill $WDPID 2>/dev/null
+  wait $WDPID 2>/dev/null
+  set -e
+
+  if [ "$CGRC" -ne 0 ]; then
+    [ "${VERBOSE:-0}" = "1" ] && { echo "CODEGEN FAIL $name (rc=$CGRC)"; head -3 /tmp/codegen.err; }
     codegen_fail=$((codegen_fail+1))
-    errored+=("$name:codegen")
+    if [ "$CGRC" -gt 128 ]; then errored+=("$name:codegen-timeout")
+    else errored+=("$name:codegen"); fi
     rm -rf "$workdir"
     continue
   fi
