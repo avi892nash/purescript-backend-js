@@ -27,9 +27,23 @@ and runtime-equivalent on every test we've thrown at it.
 |---|---|---|---|
 | `bin/diff-codegen.sh` | 71 | **67/71 byte / 71/71 semantic** | — (our own sample modules) |
 | `bin/run-upstream-tests.sh` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
-| `bin/run-passing-tests.sh` | 319 | **319/319 (100%)** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
-| `bin/run-warning-tests.sh` | 68 | **62/62 (100%)** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
+| `bin/run-passing-tests.sh` | 365 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
+| `bin/run-warning-tests.sh` | 68 | **62/62 codegen-eligible** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
 | `bin/test-runtime.sh` | 10 | **10/10** | — (our own runtime equivalence) |
+
+After installing the full prelude pool from `purescript/tests/support/bower.json`
+(40 packages, matching upstream's test setup), the number of tests our codegen
+can be applied to went up from 319 → 360. Of those, only **3 actually fail**:
+
+  - `4179` — runtime error from our minimal `applyLazinessTransform` not
+    handling purs's selective per-binding wrapping
+  - `BigFunction` — codegen times out (9.6 MB corefn from a 16-clause pattern
+    match; our optimizer is O(?) on it)
+  - `StringEscapes` — surrogate-pair / astral code point handling in our
+    JSON parser
+
+5 more are skipped because they need typeclass-deriving features (Contravariant /
+Profunctor / Bifunctor / Functor-from-Bi-and-Pro) that aren't in our package set.
 
 Run everything in one go:
 
