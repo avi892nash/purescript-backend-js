@@ -11,7 +11,7 @@ supported purs version**.
 The current `master` is pinned to:
 
 ```
-purescript: v0.15.15 (commit c4a35b3, released 2024-05-09)
+purescript: v0.15.15 (commit 5589e81, released 2024-05-09)
 prelude:    6.0.2
 effect:     4.0.0
 console:    6.1.0
@@ -28,10 +28,26 @@ Two checks confirm we're talking to the right version:
 
 1. **At runtime**, every corefn.json carries a `"builtWith"` field. Our
    `bin/check-version.sh` script confirms it matches the pin.
-2. **At test time**, `bin/run-upstream-tests.sh` does
-   `git fetch --tags origin` (with `UPDATE_FROM_UPSTREAM=1`) and refuses
-   to run if the local purescript checkout's `git describe` doesn't
-   match the expected tag.
+2. **At test time**, the test set under `tests/upstream/` is a verbatim
+   copy of `purescript@v0.15.15/tests/purs/` synced via
+   `bin/sync-upstream-tests.sh`. The `_SOURCE` file there records the
+   tag and commit hash for provenance. Test runners read exclusively
+   from this directory — no working-tree dependency on a sibling clone.
+
+## Test set per version
+
+`bin/test-inventory.sh` shows what each pin maps to:
+
+| Tag      | optimize | passing | warning | failing | docs | layout | graph | psci | publish | srcmaps | total |
+|----------|---------:|--------:|--------:|--------:|-----:|-------:|------:|-----:|--------:|--------:|------:|
+| v0.13.8  |        0 |     338 |      44 |     262 |   47 |     12 |     3 |    2 |       1 |       0 |   709 |
+| v0.14.9  |        1 |     389 |      65 |     363 |   50 |     13 |     4 |    2 |       1 |       0 |   888 |
+| v0.15.0  |        2 |     407 |      63 |     397 |   51 |     14 |     4 |    2 |       1 |       0 |   941 |
+| **v0.15.15** | **10** | **438** | **68** | **444** | **55** | **15** | **4** | **2** | **1** | **2** | **1039** |
+| v0.15.16 |       10 |     439 |      68 |     444 |   55 |     15 |     4 |    2 |       1 |       2 |  1040 |
+
+The bolded row is what `master` ships. To cut a branch for a different
+pin, see "How to cut a new branch" below.
 
 ## Branch matrix
 
@@ -78,9 +94,11 @@ cd ../purescript
 git fetch --tags
 git checkout v$TARGET
 
-# 4. Re-sync the upstream-optimize tests (fixtures may have changed)
+# 4. Re-sync the test set from the new tag
 cd ../purescriptCodeGen
-UPDATE_FROM_UPSTREAM=1 ./bin/run-upstream-tests.sh
+./bin/sync-upstream-tests.sh                # uses the pin from VERSIONING.md
+# or:
+./bin/sync-upstream-tests.sh v$TARGET       # explicit tag
 
 # 5. Update sample-purs to use the matching prelude version
 cd sample-purs

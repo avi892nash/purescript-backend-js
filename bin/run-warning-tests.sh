@@ -16,11 +16,11 @@ set -e
 
 PROJECT=/Users/avinashverma/purescriptCodeGen
 SAMPLE=$PROJECT/sample-purs
-PURESCRIPT=${PURESCRIPT_REPO:-/Users/avinashverma/purescript}
-TESTS_DIR=$PURESCRIPT/tests/purs/warning
+TESTS_DIR=$PROJECT/tests/upstream/warning
 
 if [ ! -d "$TESTS_DIR" ]; then
   echo "Not found: $TESTS_DIR" >&2
+  echo "Run bin/sync-upstream-tests.sh to populate the local test set." >&2
   exit 1
 fi
 

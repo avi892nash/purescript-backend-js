@@ -63,9 +63,9 @@ purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 | Path | What it is |
 |---|---|
 | [`src/PursJS/`](src/PursJS/) | The codegen, written in PureScript. ~2300 lines across 17 modules. Every file's header names its Haskell counterpart and gives a line-by-line cross-reference pinned to purescript@c4a35b3. |
-| [`sample-purs/`](sample-purs/) | A spago project with Prelude/Effect/Console + 13 hand-written `Examples.*` modules. We compile this with `purs` to get reference output, then diff against ours. |
-| [`tests/upstream-optimize/`](tests/upstream-optimize/) | Verbatim copies of upstream `purescript/tests/purs/optimize/*.{purs,out.js}` for offline runs. |
-| [`bin/`](bin/) | Four runner scripts: byte-identical diffs, semantic diffs, upstream optimize tests, upstream passing tests, runtime equivalence. |
+| [`sample-purs/`](sample-purs/) | A spago project providing the prelude/effect/console source pool that the upstream tests need to compile, plus 13 hand-written `Examples.*` modules. |
+| [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `bin/sync-upstream-tests.sh`. |
+| [`bin/`](bin/) | Seven scripts: `sync-upstream-tests.sh`, `test-inventory.sh`, `check-version.sh`, three test runners, plus `test-all.sh` aggregator. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Block-diagram of the pipeline + every place this port diverges from Haskell (20-row table). |
 | [`LEARN.md`](LEARN.md) | Deep-dive tutorial: every CoreFn expression → JS mapping with worked examples. |
 

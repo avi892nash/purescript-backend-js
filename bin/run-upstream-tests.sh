@@ -17,28 +17,11 @@ set -e
 PROJECT=/Users/avinashverma/purescriptCodeGen
 SAMPLE=$PROJECT/sample-purs
 OUT=/tmp/pursjs-upstream-tests
-
-# Prefer the local copy in tests/upstream-optimize. Fall back to a clone if
-# the user explicitly wants the latest upstream copy via UPDATE_FROM_UPSTREAM=1.
-TESTS_DIR=$PROJECT/tests/upstream-optimize
-
-if [ "${UPDATE_FROM_UPSTREAM:-0}" = "1" ]; then
-  PURESCRIPT=${PURESCRIPT_REPO:-/Users/avinashverma/purescript}
-  if [ ! -d "$PURESCRIPT" ]; then
-    echo "Cloning purescript -> $PURESCRIPT"
-    git clone --depth 1 https://github.com/purescript/purescript.git "$PURESCRIPT"
-  else
-    echo "Pulling latest purescript master"
-    (cd "$PURESCRIPT" && git fetch --depth=1 origin master 2>&1 | tail -3 && git reset --hard origin/master 2>&1 | tail -3) || true
-  fi
-  if [ -d "$PURESCRIPT/tests/purs/optimize" ]; then
-    echo "Syncing $TESTS_DIR from $PURESCRIPT/tests/purs/optimize/"
-    cp "$PURESCRIPT"/tests/purs/optimize/*.{purs,out.js,js} "$TESTS_DIR/" 2>/dev/null
-  fi
-fi
+TESTS_DIR=$PROJECT/tests/upstream/optimize
 
 if [ ! -d "$TESTS_DIR" ]; then
-  echo "FAIL: $TESTS_DIR not found. Run with UPDATE_FROM_UPSTREAM=1 to sync." >&2
+  echo "FAIL: $TESTS_DIR not found." >&2
+  echo "Run bin/sync-upstream-tests.sh to populate the local test set." >&2
   exit 1
 fi
 
