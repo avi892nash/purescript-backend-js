@@ -23,12 +23,21 @@ and runtime-equivalent on every test we've thrown at it.
 
 ## Results at a glance
 
-| Test suite | Count | Pass rate | Notes |
+| Test suite | Count | Pass rate | Mirrors |
 |---|---|---|---|
-| `bin/diff-codegen.sh` (sample modules) | 71 | **67/71 byte / 71/71 semantic** | 4 differ only in `$N` fresh-name numbering — structurally identical |
-| `bin/run-upstream-tests.sh` (upstream `optimize/`) | 10 | **8/10 byte / 9/10 semantic** | Mirrors `purescript/tests/purs/optimize/` golden tests |
-| `bin/run-passing-tests.sh` (upstream `passing/`) | 319 | **319/319 (100%)** | Mirrors `purescript/tests/purs/passing/` runtime "Done" assertions |
-| `bin/test-runtime.sh` | 10 | **10/10** | Loads each module in node and confirms its exports behave identically |
+| `bin/diff-codegen.sh` | 71 | **67/71 byte / 71/71 semantic** | — (our own sample modules) |
+| `bin/run-upstream-tests.sh` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
+| `bin/run-passing-tests.sh` | 319 | **319/319 (100%)** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
+| `bin/run-warning-tests.sh` | 68 | **62/62 (100%)** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
+| `bin/test-runtime.sh` | 10 | **10/10** | — (our own runtime equivalence) |
+
+Run everything in one go:
+
+```bash
+./bin/test-all.sh                 # ~10 minutes
+QUICK=1 ./bin/test-all.sh         # LIMIT=20 per suite, ~30s smoke test
+CI=1 ./bin/test-all.sh            # exit 1 if any suite has failures
+```
 
 The remaining 4 byte-diff modules pass `SEMANTIC=1` mode (which normalises
 `$N` numbering) and pass the runtime test — they diverge only because
@@ -151,15 +160,31 @@ SEMANTIC=1 ./bin/diff-codegen.sh   # 71/71 semantic match
    are about codegen output (`optimize`, `passing`) and provide our own
    sample-modules diff suite plus a node-based runtime equivalence checker.
 
+## Version pinning
+
+This codegen targets a **specific** purescript release. `master` is pinned to
+**purs v0.15.15** (commit `c4a35b3`). See [VERSIONING.md](VERSIONING.md) for:
+
+- The full pin (purs + prelude + package-set versions)
+- The branch matrix for older purs versions
+- What changes across purs versions and which PursJS modules are affected
+- How to cut a new branch for a different purs release
+
+Check that your local purescript checkout matches the pin:
+
+```bash
+./bin/check-version.sh
+```
+
 ## Further reading
 
 - [LEARN.md](LEARN.md) — CoreFn-to-JS mapping in detail, every expression
   variant explained with source / corefn / output triplets.
+- [VERSIONING.md](VERSIONING.md) — Version-pinning policy and branch matrix.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Codegen pipeline block diagram +
   every decision-point and divergence from Haskell.
 - [docs/TESTING.md](docs/TESTING.md) — Test-infrastructure block diagram +
-  per-runner flow for all four scripts (`diff-codegen.sh`,
-  `run-upstream-tests.sh`, `run-passing-tests.sh`, `test-runtime.sh`).
+  per-runner flow for all five scripts.
 - [tests/upstream-optimize/README.md](tests/upstream-optimize/README.md) — What
   each of the 10 upstream optimize tests exercises.
 - The upstream Haskell sources cloned at `/Users/avinashverma/purescript/`

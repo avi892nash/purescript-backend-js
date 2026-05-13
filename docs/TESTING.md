@@ -1,14 +1,17 @@
 # Testing infrastructure
 
-Four runner scripts cover three categories of "is our codegen correct?"
-checks:
+Five runner scripts + one aggregator cover three categories of
+"is our codegen correct?" checks:
 
-| Script | What it tests | How it tests | Inputs |
+| Script | What it tests | How | Inputs |
 |---|---|---|---|
-| `bin/diff-codegen.sh` | Output bytes for hand-curated modules | text diff against purs's output | `sample-purs/src/**/*.purs` + Prelude/Effect/Console |
-| `bin/run-upstream-tests.sh` | Output bytes for upstream golden tests | text diff against checked-in `.out.js` files | `tests/upstream-optimize/*.{purs,out.js}` |
-| `bin/run-passing-tests.sh` | Runtime behavior — `Done` assertion | execute via node, check last stdout line | `purescript/tests/purs/passing/*.purs` |
-| `bin/test-runtime.sh` | Runtime behavior — function-by-function equivalence | execute exports via both codegens, compare | one module at a time |
+| `bin/diff-codegen.sh` | Output bytes for hand-curated modules | text diff against purs's output | `sample-purs/src/**/*.purs` |
+| `bin/run-upstream-tests.sh` | Output bytes, upstream golden tests | text diff against checked-in `.out.js` | `tests/upstream-optimize/*.{purs,out.js}` |
+| `bin/run-passing-tests.sh` | Runtime — `log "Done"` assertion | execute via node, check last stdout line | `purescript/tests/purs/passing/*.purs` |
+| `bin/run-warning-tests.sh` | Codegen-completes-without-crashing | `purs compile` → our codegen → `node --check` | `purescript/tests/purs/warning/*.purs` |
+| `bin/test-runtime.sh` | Per-module runtime equivalence | execute exports via both codegens, compare | one module at a time |
+| `bin/test-all.sh` | Roll-up of all the above + version check | runs them in sequence and tabulates results | — |
+| `bin/check-version.sh` | Pin check (purescript@expected commit) | `git describe` on the local purescript clone | — |
 
 ## Overall flow
 
@@ -359,4 +362,47 @@ substitutes through, then text-diffs.
 | run-upstream-tests.sh | byte | 8/10 | 4179 (selective lazy wrap), ObjectUpdate ($N) |
 | run-upstream-tests.sh | semantic | **9/10** | only 4179 truly differs |
 | run-passing-tests.sh | runtime | **319/319** | of codegen-eligible tests |
+| run-warning-tests.sh | codegen | **62/62** | of codegen-eligible (purs warns + we lower it OK) |
 | test-runtime.sh | runtime | **10/10** | hand-picked modules |
+
+## Why some upstream categories aren't tested
+
+The upstream `tests/purs/` directory has 10 categories; we cover the 4
+that exercise codegen (`optimize`, `passing`, `warning`, plus the
+informal `tests/upstream-optimize/` snapshot).
+
+The other 6 don't reach codegen, or aren't codegen's responsibility:
+
+| Category | What it tests | Why we don't run it |
+|---|---|---|
+| `failing/` (444) | Programs that should fail to compile | Never reaches codegen |
+| `docs/` (53) | Documentation generation (`purs docs`) | Different output format, not JS |
+| `layout/` (15) | Parser layout rules | Parser, not codegen |
+| `graph/` (4) | `purs graph` module dependency output | CLI feature, not JS codegen |
+| `psci/` (2) | REPL behaviour | Not JS codegen |
+| `sourcemaps/` (2) | Source map generation | We don't emit source maps yet |
+| `publish/` (0) | `purs publish` | Not codegen |
+
+## Aggregator: `bin/test-all.sh`
+
+Runs every codegen-relevant suite + the version check, then prints a
+single roll-up table:
+
+```
+═════════════════════════════════════════════════════════════
+ROLL-UP
+═════════════════════════════════════════════════════════════
+  Suite                          Pass      Fail   Skipped
+  ─────                          ────      ────   ───────
+  [1] Sample diff                  67         4         0
+  [2] Upstream optimize             8         2         0
+  [3] Upstream passing            319         0        46
+  [4] Upstream warning             62         0         6
+  [5] Runtime equiv                10         0         0
+═════════════════════════════════════════════════════════════
+```
+
+Modes:
+- `QUICK=1` — `LIMIT=20` per suite (~30s smoke check)
+- `SKIP=3,4` — skip suites 3 and 4 (the comma-separated numbers)
+- `CI=1` — exit 1 if any suite has failures
