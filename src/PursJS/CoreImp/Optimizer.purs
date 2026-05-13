@@ -31,7 +31,7 @@ import Prelude
 import Data.Array as Array
 import Data.Traversable (traverse)
 import PursJS.CodeGen.Supply (Supply)
-import PursJS.CoreImp.AST (AST)
+import PursJS.CoreImp.AST (AST(..), UnaryOperator(..))
 import PursJS.CoreImp.Optimizer.Blocks (collapseNestedBlocks, collapseNestedIfs)
 import PursJS.CoreImp.Optimizer.Common (applyAll)
 import PursJS.CoreImp.Optimizer.FnComposition (inlineFnComposition)
@@ -42,6 +42,7 @@ import PursJS.CoreImp.Optimizer.TCO (tco)
 import PursJS.CoreImp.Optimizer.Uncurried (mkUncurriedInliners)
 import PursJS.CoreImp.Optimizer.Unused (removeCodeAfterReturnStatements, removeUndefinedApp, removeUnusedEffectFreeVars)
 import PursJS.CoreImp.Traversals (everywhereTopDown)
+import Data.Either (Either(..))
 
 optimize :: Array String -> Array (Array AST) -> Supply (Array (Array AST))
 optimize exps jsDecls = do
@@ -60,8 +61,26 @@ optimize exps jsDecls = do
       withMagicDo = map (map (untilFixed magicDoAll)) inlined
   -- Apply TCO after magicDo so that the de-monadised loop body can be analysed.
   let withTco = map (map (tco <<< untilFixed tidyUp)) withMagicDo
-  let cleaned = map (map (untilFixed tidyUp)) withTco
+  -- checkIntegers (JS.hs:190-207) — fold `Unary Negate (NumericLiteral i)`
+  -- into `NumericLiteral (-i)` so we never emit `--N` for `n = -2147483648`.
+  let withChecked = map (map (everywhereTopDown checkIntegers)) withTco
+  let cleaned = map (map (untilFixed tidyUp)) withChecked
   pure (removeUnusedEffectFreeVars exps cleaned)
+
+-- | JS.hs:191-207 — `checkIntegers`. Top-down rewrite that absorbs a leading
+-- | `Unary Negate` into a `NumericLiteral` so we don't end up emitting
+-- | `--2147483648` for `n = -2147483648` (where the corefn contains
+-- | `Unary Negate (NumericLiteral 2147483648)` and our parser wraps
+-- | 2147483648 to -2147483648 via the JS `| 0` trick).
+-- |
+-- | Note: in PureScript, `negate Int.bottom` wraps back to `Int.bottom`
+-- | (because `2147483648 :: Int` overflows). That happens to be what JS
+-- | semantics want here too — `-(-2147483648) | 0 === -2147483648` — so
+-- | the rewrite is sound even with that quirk.
+checkIntegers :: AST -> AST
+checkIntegers (Unary _ Negate (NumericLiteral ss (Left i))) =
+  NumericLiteral ss (Left (negate i))
+checkIntegers other = other
 
 tidyUp :: AST -> AST
 tidyUp = applyAll
