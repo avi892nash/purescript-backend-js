@@ -173,6 +173,24 @@ p_applicativeEffect = mkRef "Effect" "applicativeEffect"
 p_m_Effect :: ModuleName
 p_m_Effect = ModuleName "Effect"
 
+-- Control.Monad.ST.Internal — magicDoST target dictionaries.
+p_bindST :: Ref
+p_bindST = mkRef "Control.Monad.ST.Internal" "bindST"
+p_applicativeST :: Ref
+p_applicativeST = mkRef "Control.Monad.ST.Internal" "applicativeST"
+
+p_m_ST_Internal :: ModuleName
+p_m_ST_Internal = ModuleName "Control.Monad.ST.Internal"
+
+-- Legacy Eff — magicDoEff target dictionaries.
+p_bindEff :: Ref
+p_bindEff = mkRef "Control.Monad.Eff" "bindEff"
+p_applicativeEff :: Ref
+p_applicativeEff = mkRef "Control.Monad.Eff" "applicativeEff"
+
+p_m_Eff :: ModuleName
+p_m_Eff = ModuleName "Control.Monad.Eff"
+
 -- Data.Function.Uncurried / Effect.Uncurried — `mkFn0..10` / `runFn0..10` etc.
 -- These are used as PREFIX strings; the inliner appends the arity (0..10) and
 -- compares against the actual ModuleAccessor.

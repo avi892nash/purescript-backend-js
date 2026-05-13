@@ -1,41 +1,24 @@
--- | Ports `magicDoEffect` from `Language.PureScript.CoreImp.Optimizer.MagicDo`
--- | (purescript@c4a35b3, src/Language/PureScript/CoreImp/Optimizer/MagicDo.hs).
+-- | Ports `magicDoEffect`, `magicDoEff`, and `magicDoST` from
+-- | `Language.PureScript.CoreImp.Optimizer.MagicDo` (purescript@c4a35b3,
+-- | src/Language/PureScript/CoreImp/Optimizer/MagicDo.hs).
 -- |
--- | Inlines monomorphic `bind`/`discard`/`pure` for the `Effect` monad into a
--- | single `function __do() { ... }` block, so that a chain of `>>=` calls
--- | compiles into a flat sequence of effectful statements.
--- |
--- | Example transform:
--- |
--- |   bind(bindEffect)(eff1)(function (x) {
--- |     return discard(bindEffect)(eff2)(function () {
--- |       return pure(applicativeEffect)(x);
--- |     });
--- |   })
--- |
--- |   →
--- |
--- |   function __do() {
--- |     var x = eff1();
--- |     eff2();
--- |     return x;
--- |   }
+-- | Inlines monomorphic `bind`/`discard`/`pure` for the `Effect`, `Eff`,
+-- | and `ST` monads into a single `function __do() { ... }` block, so that
+-- | a chain of `>>=` calls compiles into a flat sequence of effectful
+-- | statements.
 -- |
 -- | Mapping (PursJS <-> MagicDo.hs line):
 -- |   magicDoEffect             MagicDo.hs:33-34 (specialised at C.M_Effect)
--- |   magicDo (the worker)      MagicDo.hs:39-69 (we inline the worker into magicDoEffect)
--- |   isPure                    MagicDo.hs:47, 77-78
--- |   isDiscard                 MagicDo.hs:49-50, 74-75
--- |   isBind (wildcard variant) MagicDo.hs:52-54, 71-72
--- |   isBind (named variant)    MagicDo.hs:56-57
--- |   untilE / whileE rewrites  MagicDo.hs:59-63 (NOT YET ported — not exercised by the prelude+effect+console set)
--- |   __do inlining             MagicDo.hs:65, 67-68
--- |   applyReturns              MagicDo.hs:83-90
+-- |   magicDoEff                MagicDo.hs:30-31 (specialised at C.M_Control_Monad_Eff)
+-- |   magicDoST                 MagicDo.hs:36-37 (specialised at C.M_Control_Monad_ST_Internal)
+-- |   magicDo (the worker)      MagicDo.hs:39-90 (one helper here)
 -- |
--- | NOT yet ported: `magicDoEff` (legacy Eff monad), `magicDoST` (ST monad),
--- | `inlineST` (the bigger ST-ref rewriting transform).
+-- | NOT yet ported: `inlineST` (MagicDo.hs:93-136 — turns `STRef new/read/
+-- | write/modify` calls into local-variable accesses).
 module PursJS.CoreImp.Optimizer.MagicDo
   ( magicDoEffect
+  , magicDoEff
+  , magicDoST
   ) where
 
 import Prelude
@@ -44,37 +27,61 @@ import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import PursJS.CoreImp.AST (AST(..), InitializerEffects(..))
-import PursJS.CoreImp.Optimizer.Constants (Ref, p_applicativeEffect, p_bind, p_bindEffect, p_discard, p_discardUnit, p_pure)
+import PursJS.CoreImp.Optimizer.Constants (Ref, p_applicativeEff, p_applicativeEffect, p_applicativeST, p_bind, p_bindEff, p_bindEffect, p_bindST, p_discard, p_discardUnit, p_pure)
 import PursJS.CoreImp.Traversals (everywhereTopDown)
 
 isRef :: Ref -> AST -> Boolean
 isRef (Tuple mn name) (ModuleAccessor _ mn' name') = mn == mn' && name == name'
 isRef _ _ = false
 
+-- | The trio of dictionary references for a given do-notation monad.
+type EffDicts =
+  { bindDict :: Ref
+  , applicativeDict :: Ref
+  }
+
+effectDicts :: EffDicts
+effectDicts = { bindDict: p_bindEffect, applicativeDict: p_applicativeEffect }
+
+stDicts :: EffDicts
+stDicts = { bindDict: p_bindST, applicativeDict: p_applicativeST }
+
+effDicts :: EffDicts
+effDicts = { bindDict: p_bindEff, applicativeDict: p_applicativeEff }
+
 magicDoEffect :: (AST -> AST) -> AST -> AST
-magicDoEffect expander = everywhereTopDown convert
+magicDoEffect = magicDo effectDicts
+
+magicDoST :: (AST -> AST) -> AST -> AST
+magicDoST = magicDo stDicts
+
+magicDoEff :: (AST -> AST) -> AST -> AST
+magicDoEff = magicDo effDicts
+
+magicDo :: EffDicts -> (AST -> AST) -> AST -> AST
+magicDo dicts expander = everywhereTopDown convert
   where
   fnName :: String
   fnName = "__do"
 
   convert :: AST -> AST
-  -- pure(applicativeEffect)(val)()  ->  val
+  -- pure(applicative)(val)()  ->  val
   convert (App _ (App _ pureFn [val]) []) | isPure pureFn = val
 
-  -- discard(bindEffect)(m)(function () { ...js })
+  -- discard(bind)(m)(function () { ...js })
   --   →  function __do() { m(); applyReturns js }
   convert (App _ (App _ b [m]) [Function s1 Nothing [] (Block s2 js)])
     | isDiscard b =
         Function s1 (Just fnName) []
           (Block s2 (Array.cons (App s2 m []) (map applyReturns js)))
 
-  -- bind(bindEffect)(m)(function () { ...js }) — wildcard binder
+  -- bind(bind)(m)(function () { ...js }) — wildcard binder
   convert (App _ (App _ b [m]) [Function s1 Nothing [] (Block s2 js)])
     | isBind b =
         Function s1 (Just fnName) []
           (Block s2 (Array.cons (App s2 m []) (map applyReturns js)))
 
-  -- bind(bindEffect)(m)(function (arg) { ...js })
+  -- bind(bind)(m)(function (arg) { ...js })
   convert (App _ (App _ b [m]) [Function s1 Nothing [arg] (Block s2 js)])
     | isBind b =
         Function s1 (Just fnName) []
@@ -91,22 +98,21 @@ magicDoEffect expander = everywhereTopDown convert
   convert other = other
 
   isBind ast = case expander ast of
-    App _ fn [dict] -> isRef p_bind fn && isRef p_bindEffect dict
+    App _ fn [dict] -> isRef p_bind fn && isRef dicts.bindDict dict
     _ -> false
 
   isDiscard ast = case expander ast of
     App _ inner [dict] -> case expander inner of
-      App _ fn [dict'] -> isRef p_discard fn && isRef p_discardUnit dict' && isRef p_bindEffect dict
+      App _ fn [dict'] -> isRef p_discard fn && isRef p_discardUnit dict' && isRef dicts.bindDict dict
       _ -> false
     _ -> false
 
   isPure ast = case expander ast of
-    App _ fn [dict] -> isRef p_pure fn && isRef p_applicativeEffect dict
+    App _ fn [dict] -> isRef p_pure fn && isRef dicts.applicativeDict dict
     _ -> false
 
   -- After we collapse `bind` into a do-block, the continuations stop being
-  -- effectful (Effect a => Effect b becomes a → b). To stitch the block back
-  -- into JS, any final `return <ast>` needs to become `return <ast>()`.
+  -- effectful. Any final `return <ast>` becomes `return <ast>()`.
   applyReturns :: AST -> AST
   applyReturns (Return ss ret) = Return ss (App ss ret [])
   applyReturns (Block ss js) = Block ss (map applyReturns js)

@@ -49,10 +49,42 @@ cd ..
 # Run our codegen on a single module
 spago run --main PursJS.Main -- ./sample-purs/output_ref/Simple/corefn.json
 
-# Compare against purs's output across all 58 modules
+# Compare against purs's output across all 71 modules
 ./bin/diff-codegen.sh
 # Verbose: shows OK/DIFF per module
 VERBOSE=1 ./bin/diff-codegen.sh
+```
+
+## Running the upstream optimizer test suite
+
+The purescript Haskell repo has 10 golden tests under
+`tests/purs/optimize/*.{purs,out.js}` — each compiles a small program and
+diffs against an expected JS output. We mirror these in
+`tests/upstream-optimize/` and run them via `bin/run-upstream-tests.sh`:
+
+```bash
+# Run against the locally checked-in copies
+./bin/run-upstream-tests.sh
+
+# Output:
+# OK   2866
+# DIFF 4179
+# OK   4229
+# OK   4386
+# OK   Foreign
+# OK   Monad
+# DIFF ObjectUpdate
+# OK   Primitives
+# OK   RecursiveInstances
+# OK   Symbols
+# Upstream optimizer tests: 8 pass, 2 differ, 0 errored
+
+# Pull latest from upstream, then run
+UPDATE_FROM_UPSTREAM=1 ./bin/run-upstream-tests.sh
+
+# Normalize $N fresh-name numbering
+SEMANTIC=1 ./bin/run-upstream-tests.sh
+# → 9 pass, 1 differ, 0 errored
 ```
 
 ## Status

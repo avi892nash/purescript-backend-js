@@ -3,7 +3,14 @@ package:
   dependencies:
     - console
     - effect
+    - identity
+    - maybe
+    - partial
     - prelude
+    - st
+    - tailrec
+    - type-equality
+    - typelevel-prelude
   test:
     main: Test.Main
     dependencies: []

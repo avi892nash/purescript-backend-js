@@ -37,7 +37,7 @@ import PursJS.CoreImp.Optimizer.Common (applyAll)
 import PursJS.CoreImp.Optimizer.FnComposition (inlineFnComposition)
 import PursJS.CoreImp.Optimizer.Inliner (etaConvert, evaluateIifes, inlineVariables, unThunk)
 import PursJS.CoreImp.Optimizer.Inliner2 (buildExpander, inlineCommonOperators, inlineCommonValues, inlineFnIdentity, inlineUnsafeCoerce, inlineUnsafeIndex, inlineUnsafePartial)
-import PursJS.CoreImp.Optimizer.MagicDo (magicDoEffect)
+import PursJS.CoreImp.Optimizer.MagicDo (magicDoEff, magicDoEffect, magicDoST)
 import PursJS.CoreImp.Optimizer.TCO (tco)
 import PursJS.CoreImp.Optimizer.Uncurried (mkUncurriedInliners)
 import PursJS.CoreImp.Optimizer.Unused (removeCodeAfterReturnStatements, removeUndefinedApp, removeUnusedEffectFreeVars)
@@ -54,7 +54,10 @@ optimize exps jsDecls = do
         ]) ast
       monadicRound ast = inlineFnComposition expander (pureRound ast)
   inlined <- traverse (traverse (\ast -> untilFixedM 16 monadicRound ast)) jsDecls
-  let withMagicDo = map (map (untilFixed (magicDoEffect expander))) inlined
+  -- Run all three magicDo passes (Effect, ST, Eff) — each only matches its
+  -- specific dictionary refs so they're independent.
+  let magicDoAll = magicDoEffect expander <<< magicDoST expander <<< magicDoEff expander
+      withMagicDo = map (map (untilFixed magicDoAll)) inlined
   -- Apply TCO after magicDo so that the de-monadised loop body can be analysed.
   let withTco = map (map (tco <<< untilFixed tidyUp)) withMagicDo
   let cleaned = map (map (untilFixed tidyUp)) withTco

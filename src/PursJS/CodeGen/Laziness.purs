@@ -46,16 +46,21 @@ import PursJS.CoreImp.AST (AST(..), BinaryOperator(..), InitializerEffects(..), 
 import PursJS.PSString (mkString)
 
 -- | Compute whether `ast` contains a `Var name` (where `name ∈ siblings`)
--- | that is NOT inside any nested `Function` literal. Used to detect "this
--- | binding eagerly references a sibling, so the whole Rec group needs
--- | lazy wrapping".
+-- | that is NOT inside any nested `Function` literal — UNLESS that Function
+-- | is immediately applied as an IIFE (in which case it IS eager).
+-- |
+-- | This catches both the obvious case (a bare `Var sibling` at the top of
+-- | an initializer) and the IIFE case
+-- |
+-- |   (function () { return sibling; })()
+-- |
+-- | which the codegen produces for ObjectUpdate, Let, etc.
 hasEagerSiblingRef :: Set String -> AST -> Boolean
 hasEagerSiblingRef siblings = go
   where
   go :: AST -> Boolean
   go (Var _ n) = Set.member n siblings
-  -- Function bodies are not eager — references inside them only evaluate
-  -- when the function is called.
+  -- A bare Function literal (not being applied) is not eager.
   go (Function _ _ _ _) = false
   go (NumericLiteral _ _) = false
   go (StringLiteral _ _) = false
@@ -65,6 +70,10 @@ hasEagerSiblingRef siblings = go
   go (ArrayLiteral _ xs) = Array.any go xs
   go (Indexer _ a b) = go a || go b
   go (ObjectLiteral _ ps) = Array.any (\(Tuple _ v) -> go v) ps
+  -- An IIFE — `(function (args) { body })(args')` — eagerly executes its
+  -- body. Walk into the function body too (treating each parameter as a
+  -- regular binder; references that match a sibling are still eager).
+  go (App _ (Function _ _ _ body) xs) = goBlock body || Array.any go xs
   go (App _ f xs) = go f || Array.any go xs
   go (ModuleAccessor _ _ _) = false
   go (Block _ xs) = Array.any go xs
@@ -80,6 +89,11 @@ hasEagerSiblingRef siblings = go
   go (Throw _ a) = go a
   go (InstanceOf _ a b) = go a || go b
   go (Comment _ a) = go a
+
+  -- Walk into a Block (the body of an IIFE) at the same eager level.
+  goBlock :: AST -> Boolean
+  goBlock (Block _ xs) = Array.any go xs
+  goBlock other = go other
 
   maybe :: Boolean -> (AST -> Boolean) -> Maybe AST -> Boolean
   maybe d f = case _ of
