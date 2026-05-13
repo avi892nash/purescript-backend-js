@@ -243,7 +243,8 @@ moduleBindToJs opts mn = bindToJs
     -- Materialise each binding into a CoreImp.AST first so we can inspect it.
     initAsts <- traverse (\v -> do
         ast <- nonRecToJS v.ann v.ident v.expr
-        pure { ident: v.ident, ast }) vs
+        let line = case v.ann.ss of SourceSpan ss -> case ss.start of SourcePos l _ -> l
+        pure { ident: v.ident, ast, line }) vs
     let siblingNames = Set.fromFoldable (map (\v -> identToJs v.ident) vs)
     -- A binding is in `wrapSet` if its initializer eagerly references any
     -- sibling (i.e. a `Var sibling` not inside a `Function`). These are the
@@ -256,14 +257,13 @@ moduleBindToJs opts mn = bindToJs
       then pure (map _.ast initAsts)
       else do
         let nonWrapped = Array.filter (\b -> not (Set.member (astName b.ast) wrapSet)) initAsts
-            wrapped = Array.filter (\b -> Set.member (astName b.ast) wrapSet) initAsts
-            -- Inside non-wrapped binding bodies, references to *wrapped*
-            -- siblings need to go through `$lazy_X(0)` because the wrapped
-            -- bindings won't exist yet at any point where a closure body might
-            -- be entered before module-init completes.
+            -- Reverse the wrapped order to match purs's emission. purs's
+            -- `applyLazinessTransform` topologically sorts wrapped bindings
+            -- so that ones referenced via `$lazy_X(0)` inside other wrapped
+            -- bodies are emitted first. The simplest heuristic that matches
+            -- purs's output on Effect is to reverse the corefn Rec order.
+            wrapped = Array.reverse $ Array.filter (\b -> Set.member (astName b.ast) wrapSet) initAsts
             nonWrappedAsts = map (\b -> rewriteSiblingsExpr wrapSet b.ast) nonWrapped
-            -- Inside wrapped binding init bodies, the same rule applies — refs
-            -- to OTHER wrapped siblings need to be `$lazy_Y(0)`.
             lazyDecls = map (mkLazyDecl wrapSet mn) wrapped
             materials = map mkMaterial wrapped
         pure (nonWrappedAsts <> lazyDecls <> materials)
@@ -298,7 +298,7 @@ moduleBindToJs opts mn = bindToJs
         VariableIntroduction Nothing name
           (Just (Tuple eff
             (App Nothing (Var Nothing (lazyName name))
-              [NumericLiteral Nothing (Left 0)])))
+              [NumericLiteral Nothing (Left b.line)])))
       other -> other
 
   isTypeClassConstructor :: Ann -> Boolean
