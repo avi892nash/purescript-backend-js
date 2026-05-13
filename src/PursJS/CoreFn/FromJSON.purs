@@ -46,6 +46,8 @@ import PursJS.PSString (PSString, mkString)
 
 type Parser a = Either String a
 
+foreign import truncate32 :: Number -> Int
+
 parseModule :: String -> Either String (Module Ann)
 parseModule s = jsonParser s >>= moduleFromJson
 
@@ -60,8 +62,20 @@ asArray j = note "expected array" (toArray j)
 asString :: Json -> Parser String
 asString j = note "expected string" (toString j)
 
+-- | Lenient Int parser: accepts any 32-bit-representable value.
+-- |
+-- | The corefn can contain `IntLiteral 2147483648` as the immediate operand of
+-- | a negation; the Haskell `checkIntegers` pass (JS.hs:191-207) handles this
+-- | by moving the sign into the literal. `Int.fromNumber` rejects values >
+-- | 2^31-1, so we fall back to truncating via the JS `| 0` operator (which
+-- | wraps 2147483648 to -2147483648).
 asInt :: Json -> Parser Int
-asInt j = note "expected int" (toNumber j >>= Int.fromNumber)
+asInt j = note "expected int" (toNumber j >>= toInt32)
+  where
+  toInt32 :: Number -> Maybe Int
+  toInt32 n = case Int.fromNumber n of
+    Just i -> Just i
+    Nothing -> Just (truncate32 n)
 
 asNumber :: Json -> Parser Number
 asNumber j = note "expected number" (toNumber j)

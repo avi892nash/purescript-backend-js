@@ -40,8 +40,18 @@ node --input-type=module -e "import('$PROJECT/output/PursJS.Main/index.js')" 2>/
 
 # Collect prelude/effect/console/etc. sources once
 SOURCES_FILE=$(mktemp -t pursjs-sources-XXXXXX)
-trap "rm -f $SOURCES_FILE" EXIT
+SHARED_OUTPUT=$(mktemp -d -t pursjs-shared-output-XXXXXX)
+trap "rm -f $SOURCES_FILE; rm -rf $SHARED_OUTPUT" EXIT
 find "$SAMPLE"/.spago/p -name "*.purs" -type f > "$SOURCES_FILE"
+
+# Pre-compile all deps to a shared output dir so per-test purs invocations
+# only need to compile the test itself (purs picks up the existing externs).
+echo "Pre-compiling prelude/effect/console/etc. once..."
+xargs purs compile --codegen js,corefn -o "$SHARED_OUTPUT" < "$SOURCES_FILE" >/dev/null 2>&1 || {
+  echo "Pre-compile failed:" >&2
+  xargs purs compile --codegen js,corefn -o "$SHARED_OUTPUT" < "$SOURCES_FILE" 2>&1 | tail -10 >&2
+  exit 1
+}
 
 ok=0
 fail=0
@@ -76,8 +86,11 @@ for purs in "$TESTS_DIR"/*.purs; do
   fi
 
   workdir=$(mktemp -d -t pursjs-passing-XXXXXX)
+  # Copy the shared dependency outputs so per-test compile reuses them.
+  # We use hard links instead of `cp -r` to make this O(test) instead of O(deps).
+  cp -al "$SHARED_OUTPUT" "$workdir/output" 2>/dev/null || cp -r "$SHARED_OUTPUT" "$workdir/output"
 
-  # Compile with purs (Main = the test's .purs, plus optional companions, plus all prelude/etc.)
+  # Compile only the test source + companions (deps are already in $workdir/output)
   if ! xargs purs compile --codegen js,corefn -o "$workdir/output" "$purs" "${extra_files[@]}" < "$SOURCES_FILE" 2>/tmp/purs.err >/dev/null; then
     if [ "${VERBOSE:-0}" = "1" ]; then echo "PURS FAIL $name"; cat /tmp/purs.err | head -20; fi
     purs_fail=$((purs_fail+1))
