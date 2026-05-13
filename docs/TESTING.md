@@ -1,17 +1,20 @@
 # Testing infrastructure
 
-Five runner scripts + one aggregator cover three categories of
-"is our codegen correct?" checks:
+Three runner scripts cover the codegen-relevant categories of the
+upstream PureScript test suite, plus an aggregator that runs them all
+and a few support tools. Everything reads from `tests/upstream/`, which
+is a verbatim copy of `purescript@v0.15.15/tests/purs/**` (1039 `.purs`
+files); no sibling purescript clone needed for testing.
 
-| Script | What it tests | How | Inputs |
-|---|---|---|---|
-| `bin/diff-codegen.sh` | Output bytes for hand-curated modules | text diff against purs's output | `sample-purs/src/**/*.purs` |
-| `bin/run-upstream-tests.sh` | Output bytes, upstream golden tests | text diff against checked-in `.out.js` | `tests/upstream-optimize/*.{purs,out.js}` |
-| `bin/run-passing-tests.sh` | Runtime — `log "Done"` assertion | execute via node, check last stdout line | `purescript/tests/purs/passing/*.purs` |
-| `bin/run-warning-tests.sh` | Codegen-completes-without-crashing | `purs compile` → our codegen → `node --check` | `purescript/tests/purs/warning/*.purs` |
-| `bin/test-runtime.sh` | Per-module runtime equivalence | execute exports via both codegens, compare | one module at a time |
-| `bin/test-all.sh` | Roll-up of all the above + version check | runs them in sequence and tabulates results | — |
-| `bin/check-version.sh` | Pin check (purescript@expected commit) | `git describe` on the local purescript clone | — |
+| Script | What it tests | How |
+|---|---|---|
+| `bin/run-upstream-tests.sh` | Codegen output bytes for upstream golden tests | text diff against checked-in `.out.js` files in `tests/upstream/optimize/` |
+| `bin/run-passing-tests.sh` | Runtime — `log "Done"` assertion | `purs compile` → swap our codegen in → `node` → check last stdout line |
+| `bin/run-warning-tests.sh` | Codegen completes + JS parses | `purs compile` → our codegen → `node --check` |
+| `bin/test-all.sh` | Roll-up of the three above + version check | runs them in sequence and tabulates results |
+| `bin/sync-upstream-tests.sh` | Refresh `tests/upstream/` from a tag | `git archive <tag> tests/purs | tar` |
+| `bin/test-inventory.sh` | Count tests per category, optional cross-version | reads `tests/upstream/` + optionally queries the upstream clone |
+| `bin/check-version.sh` | Verify the upstream pin | parses `VERSIONING.md`, `git describe` on the clone |
 
 ## Overall flow
 
@@ -19,128 +22,71 @@ Five runner scripts + one aggregator cover three categories of
                     ┌───────────────────────────────────────────────────┐
                     │                  INPUTS                            │
                     │                                                    │
-                    │  ┌─────────────────────────────────────────┐     │
-                    │  │ sample-purs/src/*.purs                  │     │
-                    │  │ (Tiny, Simple, Examples.*  — 13 modules)│     │
-                    │  └─────────────────────────────────────────┘     │
-                    │  ┌─────────────────────────────────────────┐     │
-                    │  │ tests/upstream-optimize/*.{purs,out.js} │     │
-                    │  │ (10 golden tests, locally mirrored)     │     │
-                    │  └─────────────────────────────────────────┘     │
-                    │  ┌─────────────────────────────────────────┐     │
-                    │  │ ../purescript/tests/purs/passing/*.purs │     │
-                    │  │ (439 runtime tests, end with log "Done")│     │
-                    │  └─────────────────────────────────────────┘     │
+                    │  ┌────────────────────────────────────────┐      │
+                    │  │ tests/upstream/optimize/ (10 + .out.js)│      │
+                    │  │ tests/upstream/passing/  (438 .purs)   │      │
+                    │  │ tests/upstream/warning/  (68 + .out)   │      │
+                    │  │ (vendored: purescript@v0.15.15)        │      │
+                    │  └────────────────────────────────────────┘      │
+                    │  ┌────────────────────────────────────────┐      │
+                    │  │ sample-purs/.spago/p/                  │      │
+                    │  │ 40-package prelude source pool         │      │
+                    │  │ (Prelude, Effect, Arrays, etc.)        │      │
+                    │  └────────────────────────────────────────┘      │
                     └────────────────────┬───────────────────────────────┘
                                          │
-                  ┌──────────────────────┼────────────────────────────────┐
-                  │                      │                                │
-                  ▼                      ▼                                ▼
-       ┌──────────────────┐   ┌──────────────────┐            ┌──────────────────┐
-       │  purs compile    │   │  purs compile    │            │  purs compile    │
-       │  --codegen       │   │  --codegen       │            │  --codegen       │
-       │  js,corefn       │   │  js,corefn       │            │  js,corefn       │
-       └────────┬─────────┘   └────────┬─────────┘            └────────┬─────────┘
-                │                      │                               │
-                ▼                      ▼                               ▼
-        ┌─────────────────┐    ┌─────────────────┐            ┌─────────────────┐
-        │ Foo/corefn.json │    │ Foo/corefn.json │            │ Foo/corefn.json │
-        │ Foo/index.js    │    │ Foo/index.js    │            │ Foo/index.js    │
-        │   (reference)   │    │   (reference)   │            │   (reference)   │
-        └─────┬───────┬───┘    └─────┬───────┬───┘            └────────┬────────┘
-              │       │              │       │                         │
-              │       │ (ref)        │       │ (ref)                   │
-              ▼       │              ▼       │                         │
-     ┌──────────────┐ │     ┌──────────────┐ │     ┌─────────────┐    │
-     │ PursJS Main  │ │     │ PursJS Main  │ │     │PursJS Main  │    │
-     │ (our codegen)│ │     │ (our codegen)│ │     │ replaces    │    │
-     └──────┬───────┘ │     └──────┬───────┘ │     │ Main/index.js│   │
-            ▼         │            ▼         │     └──────┬──────┘    │
-       [our JS]       │       [our JS]       │            ▼           ▼
-            │         │            │         │      ┌────────────────────┐
-            │         │            │         │      │  node index.js     │
-            └────┬────┘            └─────┬───┘      │  → stdout          │
-                 ▼                       ▼          └──────────┬─────────┘
-        ┌────────────────┐      ┌─────────────────┐            │
-        │bin/diff-       │      │bin/run-upstream-│            ▼
-        │ codegen.sh     │      │ tests.sh        │   [last line == "Done"?]
-        │═══════════════ │      │═══════════════  │            │
-        │1. Strip lines: │      │1. Strip lines:  │            ▼
-        │  "// Generated │      │  "// Generated  │     ┌────────────┐
-        │   by purs ..." │      │   by purs ..." │     │bin/run-     │
-        │  "//# source-  │      │  "//# source-  │     │ passing-   │
-        │   MappingURL"  │      │   MappingURL"  │     │ tests.sh   │
-        │                │      │                │     │ ═════════  │
-        │2. If SEMANTIC: │      │2. If SEMANTIC: │     └────┬───────┘
-        │  rename $N→$0  │      │  rename $N→$0  │          │
-        │  on both sides │      │  on both sides │          │
-        │                │      │                │          │
-        │3. Compare line │      │3. Compare line │          │
-        │   by line      │      │   by line      │          │
-        └────────┬───────┘      └────────┬───────┘          │
-                 ▼                       ▼                  │
-            ┌────────┐               ┌────────┐             │
-            │  OK    │   ┌──────┐    │  OK    │  ┌──────┐   ▼
-            └────────┘   │ DIFF │    └────────┘  │ DIFF │  ┌───────┐ ┌──────┐
-                         └──────┘                └──────┘  │ Done  │ │ FAIL │
-                                                           │ PASS  │ └──────┘
-                                                           └───────┘ (codegen err
-                                                                      / node err
-                                                                      / no Done)
+              ┌──────────────────────────┼──────────────────────────────┐
+              │                          │                              │
+              ▼                          ▼                              ▼
+   ┌──────────────────┐       ┌──────────────────┐           ┌──────────────────┐
+   │  purs compile    │       │  purs compile    │           │  purs compile    │
+   │  --codegen       │       │  --codegen       │           │  --codegen       │
+   │  js,corefn       │       │  js,corefn       │           │  js,corefn       │
+   └────────┬─────────┘       └────────┬─────────┘           └────────┬─────────┘
+            │                          │                               │
+            ▼                          ▼                               ▼
+    ┌─────────────────┐       ┌─────────────────┐            ┌─────────────────┐
+    │ Foo/corefn.json │       │ Foo/corefn.json │            │ Foo/corefn.json │
+    │ Foo/index.js    │       │ Foo/index.js    │            │ Foo/index.js    │
+    │   (reference)   │       │   (reference)   │            │   (reference)   │
+    └─────┬───────┬───┘       └─────┬───────────┘            └────────┬────────┘
+          │       │ (ref)           │                                 │
+          ▼       │                 ▼                                 ▼
+  ┌──────────────┐│        ┌──────────────┐                  ┌─────────────┐
+  │ PursJS Main  ││        │ PursJS Main  │                  │ PursJS Main │
+  │ (our codegen)││        │ replaces     │                  │             │
+  └──────┬───────┘│        │ Main/index.js│                  └──────┬──────┘
+         ▼        │        └──────┬───────┘                         ▼
+    [our JS]      │               ▼                          ┌────────────────┐
+         │        │        ┌────────────────────┐            │ node --check   │
+         └────┬───┘        │  node index.js     │            │ on our output  │
+              ▼            │  → stdout          │            └──────┬─────────┘
+   ┌─────────────────┐     └──────────┬─────────┘                   ▼
+   │bin/run-upstream-│                ▼                        ┌─────────┐
+   │ tests.sh        │      [last line == "Done"?]             │ OK /    │
+   │═══════════════  │                │                        │ Codegen │
+   │Strip prefix,    │                ▼                        │ /Parse  │
+   │compare bytes    │       ┌────────────┐                    │ fail    │
+   │(optional        │       │bin/run-    │                    └─────────┘
+   │ SEMANTIC=1)     │       │ passing-   │
+   └────────┬────────┘       │ tests.sh   │
+            ▼                │ ═════════  │
+        ┌────────┐           └────┬───────┘
+        │ OK /   │                │
+        │ DIFF   │                ▼
+        └────────┘         ┌───────┐ ┌──────┐
+                           │ Done  │ │ FAIL │
+                           │ PASS  │ └──────┘
+                           └───────┘
 ```
 
-## bin/diff-codegen.sh — sample module diffs
+## bin/run-upstream-tests.sh — `optimize/` goldens
 
-The fastest sanity check during development. Iterates every module under
-`sample-purs/output_ref/` and compares our codegen against purs's.
-
-```
-   sample-purs/output_ref/<Mod>/corefn.json
-            │
-            ▼
-   ┌──────────────────────┐
-   │  spago build         │  Re-build our codegen (only on first call;
-   │  (once)              │  spago caches after that)
-   └──────────┬───────────┘
-              │
-              ▼
-   ┌──────────────────────────────────────────┐
-   │  For each Mod under output_ref/:         │
-   │                                          │
-   │    ours = node Main(corefn.json)         │
-   │    ref  = output_ref/Mod/index.js        │
-   │                                          │
-   │    Strip "// Generated by..." prefix     │
-   │    Strip "//# sourceMappingURL"          │
-   │                                          │
-   │    [if SEMANTIC=1] renumber $N           │
-   │                                          │
-   │    if ours == ref:  OK                   │
-   │    else:            DIFF (save to /tmp)  │
-   └──────────────────────────────────────────┘
-              │
-              ▼
-   Summary: 67 identical, 4 differ, 0 errored
-   (in /tmp/pursjs-diff/ — DIFF saves both files for inspection)
-```
-
-**Modes:**
-- default: byte-identical
-- `SEMANTIC=1`: also renumber `$N` and `$tco_doneN` placeholders to 0..M
-  in order of first appearance on both sides. Reveals when output differs
-  *only* in fresh-name numbering (the known 4-module gap).
-- `VERBOSE=1`: print OK/DIFF per module + show first 10 diffs at end
-
-## bin/run-upstream-tests.sh — upstream `optimize/` goldens
-
-Same algorithm as `diff-codegen.sh`, but inputs come from the upstream
-purescript repo's golden suite. Each `Foo.purs` has a sibling `Foo.out.js`
-that the upstream Haskell test runner produces and validates against.
+Each `Foo.purs` has a sibling `Foo.out.js` that's the expected JS output.
 
 ```
-   tests/upstream-optimize/Foo.purs
-   tests/upstream-optimize/Foo.out.js  ← upstream's "expected output"
-            │
+   tests/upstream/optimize/Foo.purs
+   tests/upstream/optimize/Foo.out.js  ← expected
             │
             ▼
    ┌──────────────────────────────────────────┐
@@ -148,245 +94,71 @@ that the upstream Haskell test runner produces and validates against.
    │  Copy Foo.purs into workdir               │
    │  (Foreign.purs also gets Foreign.js)      │
    │                                           │
-   │  Collect all prelude sources from         │
-   │    sample-purs/.spago/p/*/src             │
-   │                                           │
    │  purs compile --codegen js,corefn \       │
    │    -o workdir/output                      │
    │    workdir/Foo.purs                       │
-   │    <all .spago sources>                   │
+   │    <all sample-purs/.spago sources>       │
    └────────────┬──────────────────────────────┘
-                ▼
-        workdir/output/Main/corefn.json
-                │
                 ▼
    ┌──────────────────────────────────────────┐
    │  ours = node PursJS.Main(corefn) \        │
    │           --with-comments                 │
-   │  (the upstream tests preserve --comments) │
-   │                                           │
    │  ref = Foo.out.js                         │
-   │                                           │
    │  Strip prefix lines, compare              │
    └────────────┬──────────────────────────────┘
                 ▼
             OK or DIFF
 ```
 
-**Modes:**
-- `UPDATE_FROM_UPSTREAM=1`: re-fetch and re-sync from upstream first
-  (clones if needed). Use this when the upstream repo has been bumped.
-- `SEMANTIC=1`: as above.
-- `VERBOSE=1`: as above.
+Modes: `SEMANTIC=1` (renumber `$N` placeholders), `VERBOSE=1` (show diffs).
 
-## bin/run-passing-tests.sh — upstream `passing/` runtime tests
+## bin/run-passing-tests.sh — `passing/` runtime tests
 
-Mirrors the upstream `assertCompiles` flow exactly. The Haskell function
-([`tests/TestCompiler.hs:131-152`](../../purescript/tests/TestCompiler.hs))
-compiles each test, writes an entry-point JS that imports `Main/index.js`
-and calls `main()`, executes via node, and expects the last line of stdout
-to be `Done`. We do the same — but plug in **our** codegen for the `Main`
-module.
+Mirrors `tests/TestCompiler.hs::assertCompiles`. Compiles each test,
+swaps our codegen for the `Main` module, runs node, expects "Done".
 
 ```
-   purescript/tests/purs/passing/Foo.purs
-   purescript/tests/purs/passing/Foo/*.purs   (optional companion modules)
-            │
+   tests/upstream/passing/Foo.purs
+   tests/upstream/passing/Foo/*.purs   (optional companion modules)
             │
    ┌────────▼──────────────────────────────────────────────┐
-   │  ONE-TIME SETUP (per script invocation):              │
-   │                                                       │
-   │    Pre-compile prelude/effect/console/etc. to a       │
-   │    SHARED output dir. Done once, reused across tests. │
-   │                                                       │
-   │    purs compile --codegen js,corefn \                 │
-   │      -o $SHARED_OUTPUT \                              │
-   │      <all .spago sources>                             │
+   │  ONE-TIME SETUP:                                       │
+   │    Pre-compile prelude → $SHARED_OUTPUT                │
+   │    (shared across tests via `cp -al` hardlinks)        │
    └────────────┬──────────────────────────────────────────┘
-                │
                 │   for each test:
                 ▼
    ┌──────────────────────────────────────────┐
    │  workdir = mktemp                         │
-   │  cp -al $SHARED_OUTPUT $workdir/output    │ ◄ hardlinks (fast!)
-   │                                           │   Cuts per-test time
-   │  purs compile --codegen js,corefn \       │   from ~3s to ~0.75s.
-   │    -o $workdir/output \                   │
-   │    $purs $companions \                    │
-   │    <all .spago sources>                   │
-   │                                           │
-   │  → $workdir/output/Main/{corefn.json,     │
-   │                          index.js (ref)}  │
+   │  cp -al $SHARED_OUTPUT $workdir/output    │
+   │  purs compile ... -o $workdir/output ...  │
    └────────────┬──────────────────────────────┘
                 ▼
    ┌──────────────────────────────────────────┐
    │  REPLACE $workdir/output/Main/index.js    │
-   │  with the output of:                      │
-   │    node PursJS.Main($corefn)              │
-   │                                           │
-   │  (Other modules — prelude etc. — keep     │
-   │   purs's index.js, since we trust those.) │
+   │  with our codegen's output                │
+   │  (60s watchdog timeout via kill -9)       │
    └────────────┬──────────────────────────────┘
                 ▼
    ┌──────────────────────────────────────────┐
-   │  Write entry-point:                       │
-   │    $workdir/output/index.js =             │
-   │      import('./Main/index.js')            │
-   │        .then(({main}) => main());         │
-   │                                           │
-   │  Run: node $workdir/output/index.js       │
-   │                                           │
-   │  Check: last stdout line == "Done"        │
+   │  Write entry-point + run node             │
+   │  Check last stdout line == "Done"         │
    └────────────┬──────────────────────────────┘
                 ▼
         ┌──────────────────────────┐
-        │ OK    Done (PASS)        │
-        │ FAIL  No-Done            │  test ran but didn't print "Done"
-        │ FAIL  Codegen err        │  our codegen threw
-        │ FAIL  Runtime err        │  node threw on the produced JS
-        │ FAIL  Purs err           │  purs couldn't compile (deps missing)
+        │ Done (PASS) | No-Done    │
+        │ Codegen err | Timeout    │
+        │ Runtime err | Purs err   │
         └──────────────────────────┘
 ```
 
-**Result classification** — each test ends up in one of five buckets:
+## bin/run-warning-tests.sh — `warning/` programs
 
-| Bucket | Meaning | Our responsibility? |
-|---|---|---|
-| `Done (PASS)` | Our codegen produced JS that ran and logged "Done" | yes ✓ |
-| `No-Done` | Our JS ran but produced wrong output | yes ✗ — semantic bug |
-| `Codegen err` | Our codegen threw a runtime error | yes ✗ — codegen bug |
-| `Runtime err` | The produced JS crashed in node | yes ✗ — semantic bug |
-| `Purs err` | `purs compile` failed (missing dep) | no — test setup, not us |
+Programs that compile + produce a specified warning. Most don't have
+`main`, so we just check that our codegen processes the corefn without
+crashing and the emitted JS parses (`node --check`).
 
-We hit **319 / 319 in the "our responsibility" bucket** (100%); the 46
-`Purs err` tests need modules like `Test.Assert`, `Effect.Ref`,
-`Type.Equality` that aren't in our `sample-purs` spago package set.
-
-**Speedup**: pre-compile prelude/effect/console **once** into a shared
-output dir, then `cp -al` (hardlink-copy) it into each test's workdir.
-The per-test `purs compile` invocation only has to compile the test
-source itself. Cuts total runtime from ~22 minutes to ~5 minutes.
-
-## bin/test-runtime.sh — runtime equivalence checker
-
-Used when a byte-diff shows up but we want to know if the JS *behaves*
-identically. Generates both codegens' output, executes a known-good driver,
-and compares the stdout.
-
-```
-   sample-purs/output_ref/<Mod>/corefn.json
-            │
-            │
-            ├────────────────────────────┬──────────────────────────────┐
-            │                            │                              │
-            ▼                            ▼                              │
-   ┌──────────────────┐         ┌──────────────────┐                   │
-   │ OURS sandbox:    │         │ PURS sandbox:    │                   │
-   │ cp -r output_ref │         │ cp -r output_ref │                   │
-   │                  │         │                  │                   │
-   │ REPLACE          │         │ (keep purs's     │                   │
-   │ Mod/index.js     │         │  Mod/index.js)   │                   │
-   │ with our codegen │         │                  │                   │
-   └────────┬─────────┘         └────────┬─────────┘                   │
-            ▼                            ▼                             │
-   ┌──────────────────┐         ┌──────────────────┐                   │
-   │ node driver.mjs  │         │ node driver.mjs  │                   │
-   │                  │         │                  │                   │
-   │ Driver calls a   │         │ Same driver,     │                   │
-   │ known set of     │         │ same arguments,  │                   │
-   │ exports for that │         │ same module      │                   │
-   │ module (e.g.     │         │ structure        │                   │
-   │ Arith.intAdd(2,3)│         │                  │                   │
-   │  for Arith)      │         │                  │                   │
-   └────────┬─────────┘         └────────┬─────────┘                   │
-            ▼                            ▼                             │
-       [ours stdout]                [purs stdout]                      │
-            │                            │                             │
-            └────────────────┬───────────┘                             │
-                             ▼                                         │
-                  ┌─────────────────────┐                              │
-                  │ diff -q ours purs   │                              │
-                  └──────────┬──────────┘                              │
-                             ▼                                         │
-                      ┌──────────────┐                                 │
-                      │ RUNTIME MATCH│                                 │
-                      │ RUNTIME DIFF │                                 │
-                      └──────────────┘                                 │
-                                                                       │
-   The driver expressions are hard-coded per module — Arith calls       │
-   intAdd/intMul/...; Effect calls monadEffect.Applicative0().pure(1)() │
-   to exercise mutually-recursive dictionaries; TailRecursion calls     │
-   sumDown(1000)(0) to exercise TCO; etc. Each driver is small (5-10    │
-   lines) and lives in the case statement in test-runtime.sh.            │
-```
-
-This is the script that found the original Effect runtime bug
-(`Control_Monad.ap(monadEffect)` eagerly evaluating `monadEffect.Applicative0()`
-before `applicativeEffect` was defined), which led to porting
-`applyLazinessTransform`.
-
-## The SEMANTIC=1 normalization
-
-Three of the four byte-only diffs in the sample suite and one of the two
-upstream-optimize diffs are pure `$N` numbering offsets. The `SEMANTIC=1`
-mode lets us measure the rate of *structural* equivalence ignoring those.
-
-```
-  Before normalization:               After normalization (both sides):
-
-    var $24 = eq(b)(zero);              var $0 = eq(b)(zero);
-    if ($24) { ... }                    if ($0) { ... }
-    var $26 = ...;                      var $1 = ...;
-    if ($26) { ... }                    if ($1) { ... }
-                                        
-  vs                                  vs
-                                      
-    var $1 = eq(b)(zero);               var $0 = eq(b)(zero);
-    if ($1) { ... }                     if ($0) { ... }
-    var $3 = ...;                       var $1 = ...;
-    if ($3) { ... }                     if ($1) { ... }
-                                       
-  → DIFF                             → MATCH
-```
-
-Implementation: a Python one-liner walks each side's text, builds a map
-`{ "$24": "$0", "$26": "$1", ... }` in order of first appearance,
-substitutes through, then text-diffs.
-
-## Combined results table
-
-| Suite | Mode | Pass | Notes |
-|---|---|---|---|
-| diff-codegen.sh | byte | 67/71 | 4 fresh-name diffs |
-| diff-codegen.sh | semantic | **71/71** | every module structurally matches |
-| run-upstream-tests.sh | byte | 8/10 | 4179 (selective lazy wrap), ObjectUpdate ($N) |
-| run-upstream-tests.sh | semantic | **9/10** | only 4179 truly differs |
-| run-passing-tests.sh | runtime | **319/319** | of codegen-eligible tests |
-| run-warning-tests.sh | codegen | **62/62** | of codegen-eligible (purs warns + we lower it OK) |
-| test-runtime.sh | runtime | **10/10** | hand-picked modules |
-
-## Why some upstream categories aren't tested
-
-The upstream `tests/purs/` directory has 10 categories; we cover the 4
-that exercise codegen (`optimize`, `passing`, `warning`, plus the
-informal `tests/upstream-optimize/` snapshot).
-
-The other 6 don't reach codegen, or aren't codegen's responsibility:
-
-| Category | What it tests | Why we don't run it |
-|---|---|---|
-| `failing/` (444) | Programs that should fail to compile | Never reaches codegen |
-| `docs/` (53) | Documentation generation (`purs docs`) | Different output format, not JS |
-| `layout/` (15) | Parser layout rules | Parser, not codegen |
-| `graph/` (4) | `purs graph` module dependency output | CLI feature, not JS codegen |
-| `psci/` (2) | REPL behaviour | Not JS codegen |
-| `sourcemaps/` (2) | Source map generation | We don't emit source maps yet |
-| `publish/` (0) | `purs publish` | Not codegen |
-
-## Aggregator: `bin/test-all.sh`
-
-Runs every codegen-relevant suite + the version check, then prints a
-single roll-up table:
+## bin/test-all.sh — aggregator
 
 ```
 ═════════════════════════════════════════════════════════════
@@ -394,15 +166,69 @@ ROLL-UP
 ═════════════════════════════════════════════════════════════
   Suite                          Pass      Fail   Skipped
   ─────                          ────      ────   ───────
-  [1] Sample diff                  67         4         0
-  [2] Upstream optimize             8         2         0
-  [3] Upstream passing            319         0        46
-  [4] Upstream warning             62         0         6
-  [5] Runtime equiv                10         0         0
+  [1] Upstream optimize             8         2         0
+  [2] Upstream passing            357         3         5
+  [3] Upstream warning             62         0         6
 ═════════════════════════════════════════════════════════════
 ```
 
 Modes:
-- `QUICK=1` — `LIMIT=20` per suite (~30s smoke check)
-- `SKIP=3,4` — skip suites 3 and 4 (the comma-separated numbers)
-- `CI=1` — exit 1 if any suite has failures
+- `QUICK=1` — LIMIT=20 per suite (~30s smoke check)
+- `SKIP=2,3` — comma-separated list of suite numbers
+- `CI=1` — exit 1 on any failure
+
+## bin/sync-upstream-tests.sh — vendor refresher
+
+```
+$ bin/sync-upstream-tests.sh            # uses VERSIONING.md pin
+$ bin/sync-upstream-tests.sh v0.14.9    # explicit tag
+```
+
+Wipes `tests/upstream/` (preserving `README.md`) and re-extracts the
+test tree from the requested tag via `git archive | tar`. Writes a
+`_SOURCE` provenance marker.
+
+## SEMANTIC=1 normalization
+
+```
+  Before:                                  After (both sides):
+    var $24 = eq(b)(zero);                   var $0 = eq(b)(zero);
+    if ($24) { ... }                         if ($0) { ... }
+
+  vs                                       vs
+
+    var $1 = eq(b)(zero);                    var $0 = eq(b)(zero);
+    if ($1) { ... }                          if ($0) { ... }
+```
+
+A Python one-liner renumbers each `$N` placeholder to `$0..$M` in order
+of first appearance on both sides before diffing. Reveals that some
+byte-level diffs are pure fresh-name numbering offsets (cosmetic — purs's
+`Supply` counter is shared with desugar/case-guards/CSE phases that we
+don't replicate).
+
+## Why some upstream categories aren't tested
+
+The upstream `tests/purs/` directory has 10 categories; we cover the 3
+that exercise codegen (`optimize`, `passing`, `warning`). The other 7
+are vendored to `tests/upstream/` for completeness but no runner exercises
+them:
+
+| Category | What it tests | Why we don't run it |
+|---|---|---|
+| `failing/` (444) | Programs that should fail to compile | Never reaches codegen |
+| `docs/` (55) | `purs docs` output | Different format, not JS |
+| `layout/` (15) | Parser layout rules | Parser, not codegen |
+| `graph/` (4) | `purs graph` module dependencies | CLI feature |
+| `psci/` (2) | REPL | Not JS codegen |
+| `sourcemaps/` (2) | Source map generation | We don't emit source maps yet |
+| `publish/` (1) | `purs publish` | Not codegen |
+
+## Combined results
+
+| Suite | Mode | Pass | Notes |
+|---|---|---|---|
+| run-upstream-tests.sh | byte | 8/10 | 4179 (selective lazy wrap), ObjectUpdate ($N) |
+| run-upstream-tests.sh | semantic | **9/10** | only 4179 truly differs |
+| run-passing-tests.sh | runtime | **357/360** of eligible | 3 failures: 4179, BigFunction, StringEscapes |
+| run-warning-tests.sh | codegen | **62/62** of eligible | (5 skipped for missing prelude deps) |

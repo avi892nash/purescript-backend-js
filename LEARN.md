@@ -1002,8 +1002,18 @@ export {
 };
 ```
 
-This matches `purs`'s output byte-for-byte. Compare with
-[sample-purs/output_ref/Tiny/index.js](sample-purs/output_ref/Tiny/index.js).
+This matches `purs`'s output byte-for-byte. You can reproduce it via:
+
+```bash
+# Compile Tiny.purs with purs (uses sample-purs/.spago/ for prelude)
+mkdir -p /tmp/tiny && cp sample-purs/src/Tiny.purs /tmp/tiny/Main.purs
+cd /tmp/tiny && purs compile --codegen js,corefn -o output Main.purs \
+  $(find /Users/avinashverma/purescriptCodeGen/sample-purs/.spago/p -name '*.purs')
+
+# Then run our codegen on it
+cd /Users/avinashverma/purescriptCodeGen
+spago run --main PursJS.Main -- /tmp/tiny/output/Main/corefn.json
+```
 
 ---
 

@@ -108,9 +108,7 @@ cd ..
 
 # 6. Build, test, iterate. Patch PursJS modules where the version diverges:
 spago build
-./bin/diff-codegen.sh
-./bin/run-upstream-tests.sh
-./bin/run-passing-tests.sh
+./bin/test-all.sh
 
 # 7. Update VERSIONING.md to mark this branch as supported
 # 8. Commit + push

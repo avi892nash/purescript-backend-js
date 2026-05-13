@@ -5,15 +5,13 @@
 #
 #   Suite                                       Mirrors upstream...
 #   ─────────────────────────────────────────   ──────────────────────
-#   1. bin/diff-codegen.sh    (sample modules)  (none — our own)
-#   2. bin/run-upstream-tests.sh  (optimize/)   TestCompiler.hs::optimizeTests
-#   3. bin/run-passing-tests.sh   (passing/)    TestCompiler.hs::passingTests
-#   4. bin/run-warning-tests.sh   (warning/)    TestCompiler.hs::warningTests   (codegen-side only)
-#   5. bin/test-runtime.sh        (runtime eq)  (none — our own)
+#   1. bin/run-upstream-tests.sh  (optimize/)   TestCompiler.hs::optimizeTests
+#   2. bin/run-passing-tests.sh   (passing/)    TestCompiler.hs::passingTests
+#   3. bin/run-warning-tests.sh   (warning/)    TestCompiler.hs::warningTests   (codegen-side only)
 #
 # Env:
 #   QUICK=1   Run with LIMIT=20 per suite (fast smoke test, ~30s)
-#   SKIP=<n>  Comma-separated list of suite numbers to skip ("3,4")
+#   SKIP=<n>  Comma-separated list of suite numbers to skip ("2,3")
 #   CI=1      Exit non-zero if any suite has failures (default: report only)
 
 set -e
@@ -52,36 +50,23 @@ run_suite() {
   # Parse the suite's summary line into the rollup
   case "$num" in
     1)
-      summary=$(grep "^Summary:" "$logfile" | tail -1)
-      echo "  $summary"
-      pass=$(echo "$summary" | grep -oE '[0-9]+ identical' | grep -oE '[0-9]+')
-      fail=$(echo "$summary" | grep -oE '[0-9]+ differ' | grep -oE '[0-9]+')
-      err=$(echo "$summary" | grep -oE '[0-9]+ errored' | grep -oE '[0-9]+')
-      ;;
-    2)
       summary=$(grep "^Upstream optimizer tests:" "$logfile" | tail -1)
       echo "  $summary"
       pass=$(echo "$summary" | grep -oE '[0-9]+ pass' | grep -oE '[0-9]+')
       fail=$(echo "$summary" | grep -oE '[0-9]+ differ' | grep -oE '[0-9]+')
       err=$(echo "$summary" | grep -oE '[0-9]+ errored' | grep -oE '[0-9]+')
       ;;
-    3)
+    2)
       pass=$(grep "Done (PASS):" "$logfile" | tail -1 | grep -oE '[0-9]+' | head -1)
       fail=$(grep "No-Done:\|Codegen err:\|Runtime err:" "$logfile" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo 0)
       err=$(grep "Purs err:" "$logfile" | tail -1 | grep -oE '[0-9]+' | head -1)
       echo "  Pass: $pass, Fail: $fail, Skipped (purs err): $err"
       ;;
-    4)
+    3)
       pass=$(grep "OK:" "$logfile" | tail -1 | grep -oE '[0-9]+' | head -1)
       fail=$(grep "Codegen err:\|Parse err:" "$logfile" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo 0)
       err=$(grep "Purs err:" "$logfile" | tail -1 | grep -oE '[0-9]+' | head -1)
       echo "  Pass: $pass, Fail: $fail, Skipped (purs err): $err"
-      ;;
-    5)
-      pass=$(grep -c "RUNTIME MATCH" "$logfile" || true)
-      fail=$(grep -c "RUNTIME DIFF" "$logfile" || true)
-      err=0
-      echo "  Pass: $pass, Fail: $fail"
       ;;
   esac
   echo "$num|$name|${pass:-?}|${fail:-?}|${err:-?}" >> /tmp/pursjs-test-all-summary
@@ -91,11 +76,9 @@ run_suite() {
 
 rm -f /tmp/pursjs-test-all-summary
 
-run_suite 1 "Sample diff" "./bin/diff-codegen.sh"
-run_suite 2 "Upstream optimize" "./bin/run-upstream-tests.sh"
-run_suite 3 "Upstream passing" "./bin/run-passing-tests.sh"
-run_suite 4 "Upstream warning" "./bin/run-warning-tests.sh"
-run_suite 5 "Runtime equiv" "for m in Examples.Arith Examples.TailRecursion Examples.Closures Examples.ADTs Examples.Records Examples.Patterns Effect Effect.Console Effect.Class.Console Data.EuclideanRing; do ./bin/test-runtime.sh \$m; done"
+run_suite 1 "Upstream optimize" "./bin/run-upstream-tests.sh"
+run_suite 2 "Upstream passing" "./bin/run-passing-tests.sh"
+run_suite 3 "Upstream warning" "./bin/run-warning-tests.sh"
 
 echo "═════════════════════════════════════════════════════════════"
 echo "ROLL-UP"

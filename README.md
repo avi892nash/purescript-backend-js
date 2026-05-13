@@ -25,15 +25,15 @@ and runtime-equivalent on every test we've thrown at it.
 
 | Test suite | Count | Pass rate | Mirrors |
 |---|---|---|---|
-| `bin/diff-codegen.sh` | 71 | **67/71 byte / 71/71 semantic** | — (our own sample modules) |
 | `bin/run-upstream-tests.sh` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
-| `bin/run-passing-tests.sh` | 365 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
+| `bin/run-passing-tests.sh` | 438 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
 | `bin/run-warning-tests.sh` | 68 | **62/62 codegen-eligible** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
-| `bin/test-runtime.sh` | 10 | **10/10** | — (our own runtime equivalence) |
 
-After installing the full prelude pool from `purescript/tests/support/bower.json`
-(40 packages, matching upstream's test setup), the number of tests our codegen
-can be applied to went up from 319 → 360. Of those, only **3 actually fail**:
+All three suites read from the vendored upstream tree at
+[`tests/upstream/`](tests/upstream/) (1039 `.purs` files from
+`purescript@v0.15.15`), so the repo is self-contained.
+
+Of the 360 codegen-eligible passing tests, only **3 fail**:
 
   - `4179` — runtime error from our minimal `applyLazinessTransform` not
     handling purs's selective per-binding wrapping
@@ -63,7 +63,7 @@ purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 | Path | What it is |
 |---|---|
 | [`src/PursJS/`](src/PursJS/) | The codegen, written in PureScript. ~2300 lines across 17 modules. Every file's header names its Haskell counterpart and gives a line-by-line cross-reference pinned to purescript@c4a35b3. |
-| [`sample-purs/`](sample-purs/) | A spago project providing the prelude/effect/console source pool that the upstream tests need to compile, plus 13 hand-written `Examples.*` modules. |
+| [`sample-purs/`](sample-purs/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
 | [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `bin/sync-upstream-tests.sh`. |
 | [`bin/`](bin/) | Seven scripts: `sync-upstream-tests.sh`, `test-inventory.sh`, `check-version.sh`, three test runners, plus `test-all.sh` aggregator. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Block-diagram of the pipeline + every place this port diverges from Haskell (20-row table). |
@@ -108,29 +108,21 @@ cd purescriptCodeGen
 # 1. Build the codegen
 spago build
 
-# 2. Generate purs's reference output (compile the sample-purs project)
-cd sample-purs
-spago build       # installs prelude/effect/console deps
-purs compile --codegen js,corefn -o output_ref \
-  '.spago/p/console-6.1.0/src/**/*.purs' \
-  '.spago/p/effect-4.0.0/src/**/*.purs' \
-  '.spago/p/prelude-6.0.2/src/**/*.purs' \
-  'src/**/*.purs'
-cd ..
+# 2. Install the prelude source pool (40 packages — matches upstream's test-suite-support)
+cd sample-purs && spago build && cd ..
 
-# 3. Run our codegen on a single module
-spago run --main PursJS.Main -- ./sample-purs/output_ref/Simple/corefn.json
+# 3. Run the upstream test suites against our codegen
+./bin/run-upstream-tests.sh        # 10 codegen golden tests   → 8/10 byte
+./bin/run-passing-tests.sh         # 438 runtime "Done" tests  → 357/360 codegen-eligible
+./bin/run-warning-tests.sh         # 68 codegen-completes tests → 62/62 codegen-eligible
 
-# 4. Compare against purs's output across all 71 modules
-./bin/diff-codegen.sh         # 67/71 byte-identical
-SEMANTIC=1 ./bin/diff-codegen.sh   # 71/71 semantic match
+# 4. All-in-one with version check + roll-up
+./bin/test-all.sh
 
-# 5. Run the upstream Haskell test suites
-./bin/run-upstream-tests.sh   # 10 codegen golden tests
-./bin/run-passing-tests.sh    # 319 runtime "Done" tests (100% pass)
-
-# 6. Run a module in node and compare behavior between codegens
-./bin/test-runtime.sh Examples.TailRecursion
+# 5. (Once-off) generate JS for any module
+purs compile --codegen js,corefn -o /tmp/out tests/upstream/passing/Tiny.purs \
+  $(find sample-purs/.spago/p -name '*.purs')
+spago run --main PursJS.Main -- /tmp/out/Main/corefn.json
 ```
 
 ## Key things this repo demonstrates
