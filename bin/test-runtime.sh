@@ -120,6 +120,13 @@ case "$TARGET" in
       console.log('signum(ordInt)(ringInt)(7)  =', m.signum(m.ordInt)({Ring1: () => null}));
     "
     ;;
+  Examples.Uncurried)
+    EXPR="
+      console.log('logTwo length =', m.logTwo.length);  // should be 2 if mkEffectFn2 inlined
+      console.log('Running runIt():');
+      m.runIt();
+    "
+    ;;
   *)
     EXPR="console.log('exports:', Object.keys(m));"
     ;;

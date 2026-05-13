@@ -36,16 +36,19 @@ import PursJS.CoreImp.Optimizer.Blocks (collapseNestedBlocks, collapseNestedIfs)
 import PursJS.CoreImp.Optimizer.Common (applyAll)
 import PursJS.CoreImp.Optimizer.FnComposition (inlineFnComposition)
 import PursJS.CoreImp.Optimizer.Inliner (etaConvert, evaluateIifes, inlineVariables, unThunk)
-import PursJS.CoreImp.Optimizer.Inliner2 (buildExpander, inlineCommonOperators, inlineCommonValues, inlineFnIdentity, inlineUnsafeCoerce)
+import PursJS.CoreImp.Optimizer.Inliner2 (buildExpander, inlineCommonOperators, inlineCommonValues, inlineFnIdentity, inlineUnsafeCoerce, inlineUnsafeIndex, inlineUnsafePartial)
 import PursJS.CoreImp.Optimizer.MagicDo (magicDoEffect)
 import PursJS.CoreImp.Optimizer.TCO (tco)
+import PursJS.CoreImp.Optimizer.Uncurried (mkUncurriedInliners)
 import PursJS.CoreImp.Optimizer.Unused (removeCodeAfterReturnStatements, removeUndefinedApp, removeUnusedEffectFreeVars)
+import PursJS.CoreImp.Traversals (everywhereTopDown)
 
 optimize :: Array String -> Array (Array AST) -> Supply (Array (Array AST))
 optimize exps jsDecls = do
   let allTopLevel = Array.concat jsDecls
       expander = buildExpander allTopLevel
-      pureRound ast = untilFixed (inlineUnsafeCoerce <<< inlineFnIdentity expander <<< tidyUp <<< applyAll
+      uncurriedPass = everywhereTopDown (applyAll mkUncurriedInliners)
+      pureRound ast = untilFixed (inlineUnsafeCoerce <<< inlineUnsafePartial <<< inlineFnIdentity expander <<< tidyUp <<< uncurriedPass <<< inlineUnsafeIndex <<< applyAll
         [ inlineCommonValues expander
         , inlineCommonOperators expander
         ]) ast

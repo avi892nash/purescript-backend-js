@@ -61,37 +61,36 @@ Pipeline is wired end-to-end:
 
   CoreFn JSON → CoreImp AST → optimizer passes → JS text
 
-Diff against the full Prelude+Effect+Console set plus 12 hand-written examples:
-**65/70 modules byte-identical** to `purs`'s output, **69/70 semantically
+Diff against the full Prelude+Effect+Console set plus 13 hand-written examples:
+**67/71 modules byte-identical** to `purs`'s output, **71/71 semantically
 identical** under `$N` fresh-name normalization.
 
 ```
 $ ./bin/diff-codegen.sh
-Comparing 70 modules in byte-identical mode...
-Summary: 65 identical, 5 differ, 0 errored
+Comparing 71 modules in byte-identical mode...
+Summary: 67 identical, 4 differ, 0 errored
 
 $ SEMANTIC=1 ./bin/diff-codegen.sh
-Comparing 70 modules in semantic ($N normalized) mode...
-Summary: 69 identical, 1 differ, 0 errored
+Comparing 71 modules in semantic ($N normalized) mode...
+Summary: 71 identical, 0 differ, 0 errored
 ```
 
-Of the 5 byte-only diffs:
-- 4 differ ONLY in `$N` fresh-name numbering (`Data.EuclideanRing`,
-  `Data.Ord`, `Effect.Class.Console`, `Examples.Closures`). Purs's Supply
-  counter starts at a non-zero offset because desugar/case-guards/CSE
-  phases allocate names we don't replicate. Semantically identical.
-- 1 (`Effect`) uses `$lazy_*` wrappers in a different order than purs.
-  Both versions execute correctly at runtime.
-
-We verified by direct execution that the generated JavaScript matches
-purs's behavior. The `bin/test-runtime.sh` driver loads a module via both
-codegens and compares the result of calling the same exports. The Effect
-case in particular exercises the mutually-recursive instance dictionaries
-that motivated the laziness transform:
+The remaining 4 byte-only diffs (`Data.EuclideanRing`, `Data.Ord`,
+`Effect.Class.Console`, `Examples.Closures`) differ ONLY in `$N`
+fresh-name numbering. Purs's Supply counter is shared across
+desugar/case-guards/CSE phases that we don't replicate, and the Renamer
+pass destroys the original GenIdent number when renaming to a plain Ident,
+so we can't recover the offset from corefn.json either. Runtime-equivalent
+in all 4 cases:
 
 ```
+$ ./bin/test-runtime.sh Data.EuclideanRing
+RUNTIME MATCH: Data.EuclideanRing ✓
+$ ./bin/test-runtime.sh Examples.Uncurried
+RUNTIME MATCH: Examples.Uncurried ✓
 $ ./bin/test-runtime.sh Effect
 RUNTIME MATCH: Effect ✓
+... (10 modules tested at runtime, all match)
 ```
 
 ## What's ported
@@ -133,9 +132,19 @@ RUNTIME MATCH: Effect ✓
 - **CodeGen.Laziness** — minimal port of `CoreFn.Laziness.applyLazinessTransform`:
   for each `Rec` group, lazy-wrap any binding whose initializer has an eager
   reference to a sibling, and rewrite sibling references in the wrapped
-  initializers (and any non-wrapped siblings) as `$lazy_X(0)` calls.
-  Prepends the `$runtime_lazy` runtime helper at module top when any wrapping
-  occurred. Mirrors `JS.hs:209-229` (`runtimeLazy`) + `CoreFn/Laziness.hs`.
+  initializers (and any non-wrapped siblings) as `$lazy_X(line)` calls (with
+  the line number from the source span). Prepends the `$runtime_lazy` runtime
+  helper at module top when any wrapping occurred. Mirrors `JS.hs:209-229`
+  (`runtimeLazy`) + `CoreFn/Laziness.hs:542-553`.
+- **Optimizer.Uncurried** — ports the `mkFnN` / `runFnN` family for
+  `Data.Function.Uncurried`, `Effect.Uncurried`, `Control.Monad.Eff.Uncurried`,
+  `Control.Monad.ST.Uncurried` (arities 0..10). After this pass,
+  `mkEffectFn2(\a -> \b -> body)` compiles to a real two-arg
+  `function (a, b) { return body(); }` instead of a curried wrapper.
+  Mirrors `Inliner.hs:189-234`.
+- Additional pure inliners: `inlineUnsafePartial` (Inliner.hs:288-294),
+  `inlineUnsafeIndex` (Inliner.hs:161 + 236-244 — rewrites
+  `Data.Array.unsafeIndex(dict)(arr)(i)` as `arr[i]`).
 
 ## Remaining cosmetic diffs
 

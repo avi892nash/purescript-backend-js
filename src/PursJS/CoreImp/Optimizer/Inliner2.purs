@@ -20,6 +20,8 @@ module PursJS.CoreImp.Optimizer.Inliner2
   , inlineCommonOperators
   , inlineFnIdentity
   , inlineUnsafeCoerce
+  , inlineUnsafePartial
+  , inlineUnsafeIndex
   ) where
 
 import Prelude
@@ -31,7 +33,7 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import PursJS.CoreImp.AST (AST(..), BinaryOperator(..), InitializerEffects(..), UnaryOperator(..))
 import PursJS.CoreImp.Optimizer.Common (applyAll, replaceIdents)
-import PursJS.CoreImp.Optimizer.Constants (Ref, p_add, p_append, p_boundedBoolean, p_bottom, p_categoryFn, p_conj, p_div, p_disj, p_eq, p_eqBoolean, p_eqChar, p_eqInt, p_eqNumber, p_eqString, p_euclideanRingNumber, p_greaterThan, p_greaterThanOrEq, p_heytingAlgebraBoolean, p_identity, p_lessThan, p_lessThanOrEq, p_mul, p_negate, p_not, p_notEq, p_one, p_ordBoolean, p_ordChar, p_ordInt, p_ordNumber, p_ordString, p_ringInt, p_ringNumber, p_semigroupString, p_semiringInt, p_semiringNumber, p_sub, p_top, p_unsafeCoerce, p_zero)
+import PursJS.CoreImp.Optimizer.Constants (Ref, p_add, p_append, p_boundedBoolean, p_bottom, p_categoryFn, p_conj, p_div, p_disj, p_eq, p_eqBoolean, p_eqChar, p_eqInt, p_eqNumber, p_eqString, p_euclideanRingNumber, p_greaterThan, p_greaterThanOrEq, p_heytingAlgebraBoolean, p_identity, p_lessThan, p_lessThanOrEq, p_mul, p_negate, p_not, p_notEq, p_one, p_ordBoolean, p_ordChar, p_ordInt, p_ordNumber, p_ordString, p_ringInt, p_ringNumber, p_semigroupString, p_semiringInt, p_semiringNumber, p_sub, p_top, p_unsafeCoerce, p_unsafeIndex, p_unsafePartial, p_zero)
 import PursJS.CoreImp.Traversals (everywhere, everywhereTopDown)
 import PursJS.Names (ModuleName)
 import PursJS.PSString (PSString)
@@ -158,6 +160,7 @@ inlineCommonOperators expander =
       _ -> App ss inner [x]
     convert other = other
 
+
 inlineFnIdentity :: (AST -> AST) -> AST -> AST
 inlineFnIdentity expander = everywhereTopDown convert
   where
@@ -172,6 +175,31 @@ inlineUnsafeCoerce = everywhereTopDown convert
   where
   convert (App _ fn [x]) | isRef p_unsafeCoerce fn = x
   convert other = other
+
+-- | Inliner.hs:288-294 — `inlineUnsafePartial`. Rewrites
+-- |   `unsafePartial(<expr>)`
+-- | as
+-- |   `<expr>(undefined)`
+-- | so that the application is then optimised away if it is safe to do so.
+inlineUnsafePartial :: AST -> AST
+inlineUnsafePartial = everywhereTopDown convert
+  where
+  convert (App ss fn [comp]) | isRef p_unsafePartial fn =
+    App ss comp [Var ss "undefined"]
+  convert other = other
+
+-- | Inliner.hs:161, 236-244 —
+-- |   `inlineNonClassFunction (isModFnWithDict P_unsafeIndex) $ flip (Indexer Nothing)`.
+-- | Rewrites `unsafeIndex(dict)(arr)(i)` to `arr[i]`.
+inlineUnsafeIndex :: AST -> AST
+inlineUnsafeIndex = everywhereTopDown convert
+  where
+  convert (App _ (App _ op [arr]) [i]) | isUnsafeIndexCall op =
+    Indexer Nothing i arr
+  convert other = other
+
+  isUnsafeIndexCall (App _ fn [Var _ _]) = isRef p_unsafeIndex fn
+  isUnsafeIndexCall _ = false
 
 -- Avoid "unused" import lint warnings; these names are referenced via constants
 _unused :: { mn :: ModuleName -> ModuleName, str :: PSString -> PSString }

@@ -149,6 +149,11 @@ p_unsafeCoerce = mkRef "Unsafe.Coerce" "unsafeCoerce"
 p_unsafePartial :: Ref
 p_unsafePartial = mkRef "Partial.Unsafe" "unsafePartial"
 
+-- Data.Array — `unsafeIndex(dict)(arr)(i)` rewritten as `arr[i]`
+-- (Inliner.hs:161 — `inlineNonClassFunction (isModFnWithDict P_unsafeIndex)`)
+p_unsafeIndex :: Ref
+p_unsafeIndex = mkRef "Data.Array" "unsafeIndex"
+
 -- Control.Bind / Control.Applicative — used by magicDo
 p_bind :: Ref
 p_bind = mkRef "Control.Bind" "bind"
@@ -167,3 +172,23 @@ p_applicativeEffect = mkRef "Effect" "applicativeEffect"
 
 p_m_Effect :: ModuleName
 p_m_Effect = ModuleName "Effect"
+
+-- Data.Function.Uncurried / Effect.Uncurried — `mkFn0..10` / `runFn0..10` etc.
+-- These are used as PREFIX strings; the inliner appends the arity (0..10) and
+-- compares against the actual ModuleAccessor.
+p_mkFn :: Ref
+p_mkFn = mkRef "Data.Function.Uncurried" "mkFn"
+p_runFn :: Ref
+p_runFn = mkRef "Data.Function.Uncurried" "runFn"
+p_mkEffFn :: Ref
+p_mkEffFn = mkRef "Control.Monad.Eff.Uncurried" "mkEffFn"
+p_runEffFn :: Ref
+p_runEffFn = mkRef "Control.Monad.Eff.Uncurried" "runEffFn"
+p_mkEffectFn :: Ref
+p_mkEffectFn = mkRef "Effect.Uncurried" "mkEffectFn"
+p_runEffectFn :: Ref
+p_runEffectFn = mkRef "Effect.Uncurried" "runEffectFn"
+p_mkSTFn :: Ref
+p_mkSTFn = mkRef "Control.Monad.ST.Uncurried" "mkSTFn"
+p_runSTFn :: Ref
+p_runSTFn = mkRef "Control.Monad.ST.Uncurried" "runSTFn"
