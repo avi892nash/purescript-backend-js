@@ -8,7 +8,7 @@ supported purs version**.
 
 ## The pin
 
-The current `master` is pinned to:
+The current `main` is pinned to:
 
 ```
 purescript: v0.15.15 (commit 5589e81, released 2024-05-09)
@@ -60,7 +60,7 @@ Provenance: see `tests/upstream/_SOURCE`.
 
 | Branch         | purs version | Status      | Notes                       |
 |----------------|--------------|-------------|------------------------------|
-| `master`       | v0.15.15     | ✅ current  | The active development line |
+| `main`         | v0.15.15     | ✅ current  | The active development line |
 | `purs-0.15.10` | v0.15.10     | planned     | Diff in `$runtime_lazy` shape introduced 0.15.12 |
 | `purs-0.14.x`  | v0.14.9      | planned     | Major schema diff: `Eff` → `Effect`, `MonadEff`, `Function (Maybe Text)` |
 | `purs-0.13.x`  | v0.13.8      | not planned | Different optimizer pipeline; substantial port effort |
@@ -88,8 +88,8 @@ The codegen-relevant things that *have* changed in the past:
 ## How to cut a new branch for a different purs version
 
 ```bash
-# 1. Start from a clean master
-git checkout master
+# 1. Start from a clean main
+git checkout main
 git pull
 
 # 2. Make the version-pin branch
@@ -125,10 +125,10 @@ git push -u origin purs-$TARGET
 
 - For **library authors writing PureScript**: pin your `package.json`
   (or wherever you depend on this codegen) to a specific PursJS *tag*
-  matching your project's purs version, not to `master`.
+  matching your project's purs version, not to `main`.
 - For **users of the prebuilt JS**: just use the latest tag on the
   branch matching your purs version.
-- For **contributors**: target `master` (currently 0.15.15) unless
+- For **contributors**: target `main` (currently 0.15.15) unless
   fixing a back-ported bug on an older branch.
 
 ## Tag naming
@@ -136,7 +136,7 @@ git push -u origin purs-$TARGET
 Tags on each branch follow the pattern:
 
 ```
-master:        v0.15.15-pursjs.<N>          (e.g. v0.15.15-pursjs.0, v0.15.15-pursjs.1)
+main:          v0.15.15-pursjs.<N>          (e.g. v0.15.15-pursjs.0, v0.15.15-pursjs.1)
 purs-0.15.10:  v0.15.10-pursjs.<N>
 purs-0.14.x:   v0.14.9-pursjs.<N>
 ```

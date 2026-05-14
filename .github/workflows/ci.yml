@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, "purs-*"]
+    branches: [main, "purs-*"]
   pull_request:
-    branches: [master, "purs-*"]
+    branches: [main, "purs-*"]
   workflow_dispatch:
 
 jobs:

@@ -208,7 +208,7 @@ from.
 
 ## Version pinning
 
-This codegen targets a **specific** `purs` release. `master` is pinned
+This codegen targets a **specific** `purs` release. `main` is pinned
 to **purs v0.15.15** (commit `5589e81`). Every `corefn.json` carries a
 `builtWith` field; we compare it against our pin and reject mismatches
 (exit code 2) by default. Override with `--skip-version-check` if

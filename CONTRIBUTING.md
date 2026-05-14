@@ -46,7 +46,7 @@ npm run test:passing                      # 438 runtime tests
 npm run test:warning                      # 68 codegen-only tests
 ```
 
-A passing run on `master` shows:
+A passing run on `main` shows:
 
 ```
 optimize: 8/10 byte / 9/10 semantic
