@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// pursjs-codegen — alternative Spago backend that uses the PursJS codegen
-// (this repo) instead of purs's built-in JavaScript codegen.
+// purescript-backend-js — alternative Spago backend that uses the
+// PursJS codegen (this repo) instead of purs's built-in JavaScript codegen.
 //
 // Spago invokes the configured backend command with cwd = output/ after
 // it has run `purs compile --codegen corefn`. For each Module/corefn.json
@@ -10,9 +10,10 @@
 //
 //     workspace:
 //       backend:
-//         cmd: "pursjs-codegen"
+//         cmd: "purescript-backend-js"
 //
 // Then `spago build` invokes our codegen instead of purs's.
+// (`pursjs-codegen` is registered as an alias for the same script.)
 
 import { readdirSync, readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -23,8 +24,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PURSJS_MAIN = join(__dirname, '..', 'output', 'PursJS.Main', 'index.js');
 
 if (!existsSync(PURSJS_MAIN)) {
-  console.error(`pursjs-codegen: not built at ${PURSJS_MAIN}.`);
-  console.error('Run `npm run build` in the pursjs-codegen repo first.');
+  console.error(`purescript-backend-js: not built at ${PURSJS_MAIN}.`);
+  console.error('Run `npm run build` in the purescript-backend-js repo first.');
   process.exit(1);
 }
 
@@ -53,7 +54,7 @@ const modules = readdirSync(outputDir)
   );
 
 if (modules.length === 0) {
-  console.error('pursjs-codegen: no corefn.json files in', outputDir);
+  console.error('purescript-backend-js: no corefn.json files in', outputDir);
   console.error('Did purs run with --codegen corefn?');
   process.exit(1);
 }
@@ -98,7 +99,7 @@ for (const mod of modules) {
   }
 }
 
-console.log(`pursjs-codegen: ${okCount}/${modules.length} modules generated` +
+console.log(`purescript-backend-js: ${okCount}/${modules.length} modules generated` +
   (foreignCount > 0 ? ` (+${foreignCount} foreign.js copied)` : ''));
 
 if (errors.length > 0) {

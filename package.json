@@ -1,5 +1,5 @@
 {
-  "name": "pursjs-codegen",
+  "name": "purescript-backend-js",
   "version": "0.15.15-pursjs.0",
   "description": "An alternate JavaScript backend for the PureScript compiler — extracted from purs and re-implemented in PureScript, so optimisation passes can be hacked on in the same language you write your apps in.",
   "keywords": [
@@ -11,18 +11,19 @@
     "optimizer",
     "corefn"
   ],
-  "homepage": "https://github.com/avinashverma/purescriptCodeGen#readme",
+  "homepage": "https://github.com/avinashverma/purescript-backend-js#readme",
   "bugs": {
-    "url": "https://github.com/avinashverma/purescriptCodeGen/issues"
+    "url": "https://github.com/avinashverma/purescript-backend-js/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/avinashverma/purescriptCodeGen.git"
+    "url": "git+https://github.com/avinashverma/purescript-backend-js.git"
   },
   "license": "BSD-3-Clause",
-  "author": "pursjs-codegen contributors",
+  "author": "purescript-backend-js contributors",
   "type": "module",
   "bin": {
+    "purescript-backend-js": "./scripts/spago-backend.mjs",
     "pursjs-codegen": "./scripts/spago-backend.mjs"
   },
   "files": [

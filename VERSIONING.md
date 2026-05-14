@@ -102,7 +102,7 @@ git fetch --tags
 git checkout v$TARGET
 
 # 4. Re-sync the test set from the new tag
-cd ../purescriptCodeGen
+cd ../purescript-backend-js
 npm run sync-tests                          # uses the pin from package.json
 
 # 5. Update prelude-pool to use the matching prelude version

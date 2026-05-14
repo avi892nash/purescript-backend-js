@@ -12,7 +12,7 @@ A clear, one-line description of the bug.
 
 ## Environment
 
-- `pursjs-codegen` branch / commit:
+- `purescript-backend-js` branch / commit:
 - `purs --version`:
 - `node --version`:
 - OS:
@@ -41,7 +41,7 @@ What `purs --codegen js` produces for the same input:
 
 ## Actual output
 
-What pursjs-codegen produces:
+What purescript-backend-js produces:
 
 ```js
 // our output

@@ -31,8 +31,10 @@ First public version. Targets `purescript@v0.15.15`.
 
 #### Spago backend
 
-- Executable `pursjs-codegen` exposed via `npm link`; drop-in via
-  `workspace.backend.cmd: "pursjs-codegen"` in `spago.yaml`.
+- Executable `purescript-backend-js` exposed via `npm link`; drop-in
+  via `workspace.backend.cmd: "purescript-backend-js"` in `spago.yaml`.
+  `pursjs-codegen` is registered as an alias bin pointing at the same
+  script.
 - `scripts/spago-backend.mjs` walks `output/<Module>/corefn.json`,
   runs our codegen, and copies sibling `foreign.js` files (which
   `purs --codegen corefn` does not do on its own).
@@ -55,5 +57,5 @@ First public version. Targets `purescript@v0.15.15`.
 - No source maps (purs has `--codegen sourcemaps`; we don't).
 - One pinned `purs` version per branch.
 
-[Unreleased]: https://github.com/avinashverma/purescriptCodeGen/compare/v0.15.15-pursjs.0...HEAD
-[0.15.15-pursjs.0]: https://github.com/avinashverma/purescriptCodeGen/releases/tag/v0.15.15-pursjs.0
+[Unreleased]: https://github.com/avinashverma/purescript-backend-js/compare/v0.15.15-pursjs.0...HEAD
+[0.15.15-pursjs.0]: https://github.com/avinashverma/purescript-backend-js/releases/tag/v0.15.15-pursjs.0

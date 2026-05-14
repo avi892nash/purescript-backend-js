@@ -1005,13 +1005,15 @@ export {
 This matches `purs`'s output byte-for-byte. You can reproduce it via:
 
 ```bash
+# (Run these from your purescript-backend-js checkout.)
 # Compile Tiny.purs with purs (uses prelude-pool/.spago/ for prelude)
+PROJECT=$(pwd)
 mkdir -p /tmp/tiny && cp prelude-pool/src/Tiny.purs /tmp/tiny/Main.purs
 cd /tmp/tiny && purs compile --codegen js,corefn -o output Main.purs \
-  $(find /Users/avinashverma/purescriptCodeGen/prelude-pool/.spago/p -name '*.purs')
+  $(find "$PROJECT/prelude-pool/.spago/p" -name '*.purs')
 
 # Then run our codegen on it
-cd /Users/avinashverma/purescriptCodeGen
+cd "$PROJECT"
 spago run --main PursJS.Main -- /tmp/tiny/output/Main/corefn.json
 ```
 

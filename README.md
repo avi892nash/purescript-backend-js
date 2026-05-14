@@ -1,9 +1,9 @@
-# pursjs-codegen
+# purescript-backend-js
 
 > **A JavaScript codegen for PureScript, ported out of the compiler so
 > you can hack on optimisation passes in PureScript itself.**
 
-[![CI](https://github.com/avinashverma/purescriptCodeGen/actions/workflows/ci.yml/badge.svg)](https://github.com/avinashverma/purescriptCodeGen/actions/workflows/ci.yml)
+[![CI](https://github.com/avinashverma/purescript-backend-js/actions/workflows/ci.yml/badge.svg)](https://github.com/avinashverma/purescript-backend-js/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![purs: v0.15.15](https://img.shields.io/badge/purs-v0.15.15-purple.svg)](VERSIONING.md)
 
@@ -21,8 +21,8 @@ one baked into `purs`.
   [purs:  parse → typecheck → desugar → CoreFn]      (unchanged, still Haskell)
           │
           ▼
-      corefn.json   ──── pursjs-codegen takes over here ────►   index.js
-                                                                 foreign.js
+      corefn.json   ─── purescript-backend-js takes over here ───►   index.js
+                                                                      foreign.js
 ```
 
 ## Why
@@ -54,22 +54,23 @@ to try it out.
 
 ```bash
 # 1. Get the codegen and build it
-git clone https://github.com/avinashverma/purescriptCodeGen
-cd purescriptCodeGen
+git clone https://github.com/avinashverma/purescript-backend-js
+cd purescript-backend-js
 spago build
-npm link                          # exposes `pursjs-codegen` on PATH
+npm link                          # exposes `purescript-backend-js` on PATH
+                                  # (also registers `pursjs-codegen` as an alias)
 
 # 2. In your own PureScript project's spago.yaml:
 #
 #    workspace:
 #      backend:
-#        cmd: "pursjs-codegen"
+#        cmd: "purescript-backend-js"
 #
 # 3. Build as normal
 cd ../my-app
 spago build
-#   ⇒ Compiling with backend "pursjs-codegen"
-#   ⇒ pursjs-codegen: N/N modules generated (+M foreign.js copied)
+#   ⇒ Compiling with backend "purescript-backend-js"
+#   ⇒ purescript-backend-js: N/N modules generated (+M foreign.js copied)
 
 # 4. Run the output
 node -e "import('./output/Main/index.js').then(m => m.main());"
@@ -118,10 +119,10 @@ phases (desugar, case-guards, CSE) that we don't replicate.
                                                        │  spago invokes the
                                                        │  configured backend
                                                        ▼
-                                             ┌─────────────────┐
-                                             │ pursjs-codegen  │
-                                             │  (this repo)    │
-                                             └─────────────────┘
+                                             ┌────────────────────────┐
+                                             │ purescript-backend-js  │
+                                             │       (this repo)      │
+                                             └────────────────────────┘
                                                        │
                                                        ▼
                                              ┌─────────────────┐
@@ -130,7 +131,7 @@ phases (desugar, case-guards, CSE) that we don't replicate.
                                              └─────────────────┘
 ```
 
-What pursjs-codegen does at each module:
+What purescript-backend-js does at each module:
 
 1. Parses `corefn.json` (via Argonaut)
 2. Lowers CoreFn → CoreImp (simplified imperative JS AST)
@@ -143,7 +144,7 @@ What pursjs-codegen does at each module:
 
 ## What you get vs stock `purs`
 
-| | Stock `purs` codegen | `pursjs-codegen` |
+| | Stock `purs` codegen | `purescript-backend-js` |
 |---|---|---|
 | Output format | ES modules | ES modules (byte-identical on 67/71 of our test modules) |
 | Optimiser passes | 14 | Same 14, ported faithfully |
@@ -196,7 +197,7 @@ from.
 | [`src/PursJS/`](src/PursJS/) | The codegen, in PureScript. |
 | [`prelude-pool/`](prelude-pool/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
 | [`tests/upstream/`](tests/upstream/) | The entire upstream `purescript/tests/purs/**` tree at our pinned version (1039 `.purs` files at `v0.15.15`). Refresh with `npm run sync-tests`. |
-| [`scripts/spago-backend.mjs`](scripts/spago-backend.mjs) | The `pursjs-codegen` entry point (exposed via `npm link`). Walks `output/<Module>/corefn.json` and writes `index.js` + sibling `foreign.js`. |
+| [`scripts/spago-backend.mjs`](scripts/spago-backend.mjs) | The `purescript-backend-js` entry point (exposed via `npm link`; also installs `pursjs-codegen` as an alias). Walks `output/<Module>/corefn.json` and writes `index.js` + sibling `foreign.js`. |
 | [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test`. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Pipeline block-diagram + per-decision-point divergence from Haskell. |
 | [`docs/TESTING.md`](docs/TESTING.md) | Test-infrastructure block-diagram + per-runner flow. |

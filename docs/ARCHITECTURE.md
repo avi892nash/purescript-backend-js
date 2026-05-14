@@ -154,14 +154,14 @@ sample diff suite (`Data.EuclideanRing`, `Data.Ord`, `Effect.Class.Console`,
 ## Test infrastructure: what we mirror from upstream
 
 ```
-  purescript@v0.15.15/tests/purs/         purescriptCodeGen/tests/upstream/
-  ────────────────────────────       ──>  ─────────────────────────────────
+  purescript@v0.15.15/tests/purs/         purescript-backend-js/tests/upstream/
+  ────────────────────────────       ──>  ───────────────────────────────────
     optimize/  passing/  warning/           optimize/  passing/  warning/
     (vendored verbatim via `npm run sync-tests` from `git archive`)
 
     Run with: npm test | npm run test:optimize | …
 
-  purescript/src/Language/...        ──>  purescriptCodeGen/src/PursJS/...
+  purescript/src/Language/...        ──>  purescript-backend-js/src/PursJS/...
   (every .hs file)                        (every .purs file with a header
                                            line-range cross-reference pinned
                                            to commit 5589e81 / v0.15.15)

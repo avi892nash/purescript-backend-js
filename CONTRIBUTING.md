@@ -1,4 +1,4 @@
-# Contributing to pursjs-codegen
+# Contributing to purescript-backend-js
 
 Thanks for your interest. This project is an alternate JavaScript
 backend for PureScript, ported from the compiler's built-in codegen so
@@ -21,8 +21,8 @@ brew install purescript spago             # or your platform's equivalent
 node --version                            # ≥ 18 required
 
 # Clone and build
-git clone https://github.com/<you>/pursjs-codegen
-cd pursjs-codegen
+git clone https://github.com/<you>/purescript-backend-js
+cd purescript-backend-js
 spago build                               # builds the codegen
 cd prelude-pool && spago build && cd ..   # builds the prelude source pool used by tests
 
@@ -120,8 +120,8 @@ upstream release:
 
 Open an issue. Please include:
 
-- Your `purs --version`, Node version, and which pursjs-codegen branch
-  you're on
+- Your `purs --version`, Node version, and which purescript-backend-js
+  branch you're on
 - A minimal `.purs` reproducer
 - The `corefn.json` for that module (run `purs compile --codegen corefn`
   and attach `output/<Module>/corefn.json`)
