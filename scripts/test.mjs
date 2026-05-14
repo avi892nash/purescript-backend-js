@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT = dirname(__dirname);
 const TESTS_DIR = join(PROJECT, 'tests/upstream');
-const SAMPLE_SPAGO_P = join(PROJECT, 'sample-purs/.spago/p');
+const PRELUDE_POOL = join(PROJECT, 'prelude-pool/.spago/p');
 const PURSJS_MAIN = join(PROJECT, 'output/PursJS.Main/index.js');
 
 // ── arg parsing ────────────────────────────────────────────────────────
@@ -48,9 +48,9 @@ if (!['optimize', 'passing', 'warning', 'all'].includes(suite)) {
 
 // ── prelude source pool (one-time discovery) ───────────────────────────
 function collectPreludeSources() {
-  if (!existsSync(SAMPLE_SPAGO_P)) {
-    console.error(`Prelude pool not found at ${SAMPLE_SPAGO_P}.`);
-    console.error('Run: cd sample-purs && spago build');
+  if (!existsSync(PRELUDE_POOL)) {
+    console.error(`Prelude pool not found at ${PRELUDE_POOL}.`);
+    console.error('Run: cd prelude-pool && spago build');
     process.exit(1);
   }
   const sources = [];
@@ -62,7 +62,7 @@ function collectPreludeSources() {
       else if (p.endsWith('.purs')) sources.push(p);
     }
   }
-  walk(SAMPLE_SPAGO_P);
+  walk(PRELUDE_POOL);
   return sources;
 }
 

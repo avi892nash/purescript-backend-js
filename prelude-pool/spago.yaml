@@ -1,5 +1,5 @@
 package:
-  name: sample-purs
+  name: prelude-pool
   dependencies:
     - arrays
     - assert

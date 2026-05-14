@@ -62,7 +62,7 @@ purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 | Path | What it is |
 |---|---|
 | [`src/PursJS/`](src/PursJS/) | The codegen, written in PureScript. ~2300 lines across 17 modules. Every file's header names its Haskell counterpart and gives a line-by-line cross-reference pinned to purescript@c4a35b3. |
-| [`sample-purs/`](sample-purs/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
+| [`prelude-pool/`](prelude-pool/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
 | [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `npm run sync-tests`. |
 | [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test` — handles workdir setup, per-test purs invocation, our-codegen invocation, watchdog timeouts, result tabulation. |
 | [`package.json`](package.json) | npm script entry points (`test`, `test:optimize`, `test:passing`, `test:warning`, `test:quick`, `sync-tests`, `build`). |
@@ -109,7 +109,7 @@ cd purescriptCodeGen
 spago build
 
 # 2. Install the prelude source pool (40 packages — matches upstream's test-suite-support)
-cd sample-purs && spago build && cd ..
+cd prelude-pool && spago build && cd ..
 
 # 3. Run the upstream test suites against our codegen
 npm run test:optimize              # 10 codegen golden tests   → 8/10 byte
@@ -122,7 +122,7 @@ npm run test:quick                 # smoke check (LIMIT=10 per suite)
 
 # 5. (Once-off) generate JS for any module
 purs compile --codegen js,corefn -o /tmp/out path/to/Main.purs \
-  $(find sample-purs/.spago/p -name '*.purs')
+  $(find prelude-pool/.spago/p -name '*.purs')
 spago run --main PursJS.Main -- /tmp/out/Main/corefn.json
 ```
 

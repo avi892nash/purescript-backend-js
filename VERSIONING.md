@@ -105,8 +105,8 @@ git checkout v$TARGET
 cd ../purescriptCodeGen
 npm run sync-tests                          # uses the pin from package.json
 
-# 5. Update sample-purs to use the matching prelude version
-cd sample-purs
+# 5. Update prelude-pool to use the matching prelude version
+cd prelude-pool
 # Edit spago.yaml -> change registry version to match
 spago install
 cd ..
