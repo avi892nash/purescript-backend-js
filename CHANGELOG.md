@@ -57,5 +57,5 @@ First public version. Targets `purescript@v0.15.15`.
 - No source maps (purs has `--codegen sourcemaps`; we don't).
 - One pinned `purs` version per branch.
 
-[Unreleased]: https://github.com/avinashverma/purescript-backend-js/compare/v0.15.15-pursjs.0...HEAD
-[0.15.15-pursjs.0]: https://github.com/avinashverma/purescript-backend-js/releases/tag/v0.15.15-pursjs.0
+[Unreleased]: https://github.com/avi892nash/purescript-backend-js/compare/v0.15.15-pursjs.0...HEAD
+[0.15.15-pursjs.0]: https://github.com/avi892nash/purescript-backend-js/releases/tag/v0.15.15-pursjs.0

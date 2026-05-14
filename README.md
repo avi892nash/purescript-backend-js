@@ -3,7 +3,7 @@
 > **A JavaScript codegen for PureScript, ported out of the compiler so
 > you can hack on optimisation passes in PureScript itself.**
 
-[![CI](https://github.com/avinashverma/purescript-backend-js/actions/workflows/ci.yml/badge.svg)](https://github.com/avinashverma/purescript-backend-js/actions/workflows/ci.yml)
+[![CI](https://github.com/avi892nash/purescript-backend-js/actions/workflows/ci.yml/badge.svg)](https://github.com/avi892nash/purescript-backend-js/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![purs: v0.15.15](https://img.shields.io/badge/purs-v0.15.15-purple.svg)](VERSIONING.md)
 
@@ -54,7 +54,7 @@ to try it out.
 
 ```bash
 # 1. Get the codegen and build it
-git clone https://github.com/avinashverma/purescript-backend-js
+git clone https://github.com/avi892nash/purescript-backend-js
 cd purescript-backend-js
 spago build
 npm link                          # exposes `purescript-backend-js` on PATH

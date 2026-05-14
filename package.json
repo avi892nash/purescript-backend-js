@@ -11,13 +11,13 @@
     "optimizer",
     "corefn"
   ],
-  "homepage": "https://github.com/avinashverma/purescript-backend-js#readme",
+  "homepage": "https://github.com/avi892nash/purescript-backend-js#readme",
   "bugs": {
-    "url": "https://github.com/avinashverma/purescript-backend-js/issues"
+    "url": "https://github.com/avi892nash/purescript-backend-js/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/avinashverma/purescript-backend-js.git"
+    "url": "git+https://github.com/avi892nash/purescript-backend-js.git"
   },
   "license": "BSD-3-Clause",
   "author": "purescript-backend-js contributors",
