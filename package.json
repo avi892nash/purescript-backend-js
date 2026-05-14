@@ -1,11 +1,43 @@
 {
   "name": "pursjs-codegen",
   "version": "0.15.15-pursjs.0",
-  "description": "The PureScript compiler's JavaScript backend, rewritten in PureScript.",
+  "description": "An alternate JavaScript backend for the PureScript compiler — extracted from purs and re-implemented in PureScript, so optimisation passes can be hacked on in the same language you write your apps in.",
+  "keywords": [
+    "purescript",
+    "compiler",
+    "codegen",
+    "javascript",
+    "spago-backend",
+    "optimizer",
+    "corefn"
+  ],
+  "homepage": "https://github.com/avinashverma/purescriptCodeGen#readme",
+  "bugs": {
+    "url": "https://github.com/avinashverma/purescriptCodeGen/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avinashverma/purescriptCodeGen.git"
+  },
+  "license": "BSD-3-Clause",
+  "author": "pursjs-codegen contributors",
   "type": "module",
-  "private": true,
   "bin": {
     "pursjs-codegen": "./scripts/spago-backend.mjs"
+  },
+  "files": [
+    "scripts/",
+    "src/",
+    "spago.yaml",
+    "spago.lock",
+    "output/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+    "VERSIONING.md"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "build": "spago build",
@@ -14,10 +46,7 @@
     "test:passing": "node scripts/test.mjs passing",
     "test:warning": "node scripts/test.mjs warning",
     "test:quick": "node scripts/test.mjs all --limit=10",
-    "sync-tests": "git -C ${PURESCRIPT_REPO:-../purescript} archive --format=tar v0.15.15 tests/purs | tar -x -C tests/upstream --strip-components=2 && echo 'purescript@v0.15.15 (synced '$(date -u +%Y-%m-%dT%H:%M:%SZ)')' > tests/upstream/_SOURCE"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "license": "BSD-3-Clause"
+    "sync-tests": "git -C ${PURESCRIPT_REPO:-../purescript} archive --format=tar v0.15.15 tests/purs | tar -x -C tests/upstream --strip-components=2 && echo 'purescript@v0.15.15 (synced '$(date -u +%Y-%m-%dT%H:%M:%SZ)')' > tests/upstream/_SOURCE",
+    "prepublishOnly": "spago build"
+  }
 }

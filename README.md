@@ -1,160 +1,165 @@
-# purescriptCodeGen
+# pursjs-codegen
 
-The PureScript compiler's JavaScript backend, **rewritten in PureScript**.
+> **A JavaScript codegen for PureScript, ported out of the compiler so
+> you can hack on optimisation passes in PureScript itself.**
 
-The upstream Haskell compiler (`purs`) still does parsing, type-checking,
-desugaring, and CoreFn lowering. We pick up at `corefn.json` and produce
-the same `index.js` that `purs` would — byte-for-byte on most modules,
-and runtime-equivalent on every test we've thrown at it.
+[![CI](https://github.com/avinashverma/purescriptCodeGen/actions/workflows/ci.yml/badge.svg)](https://github.com/avinashverma/purescriptCodeGen/actions/workflows/ci.yml)
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![purs: v0.15.15](https://img.shields.io/badge/purs-v0.15.15-purple.svg)](VERSIONING.md)
+
+The PureScript compiler (`purs`) bundles its parser, type-checker,
+desugarer, CoreFn lowering, **and JavaScript codegen** all together in
+Haskell. That last part — the JavaScript codegen and its 14 optimiser
+passes — is what we've lifted out and re-implemented in PureScript.
+Hook it in as a [spago alternate backend](https://github.com/purescript/spago#alternate-backends)
+and `spago build` produces JavaScript via this codegen instead of the
+one baked into `purs`.
 
 ```
- .purs   ──┐
-           │
-   [Haskell purs: parse → typecheck → desugar → CoreFn → CSE → rename]
-           │
-           ▼
-       corefn.json   ◄─── our entry point
-           │
-   [PursJS: read JSON → CodeGen.JS → 5 rounds of optimizer → Printer]
-           │
-           ▼
-       index.js      ◄─── byte-identical to purs's output on 67/71 modules
+.purs   ──┐
+          │
+  [purs:  parse → typecheck → desugar → CoreFn]      (unchanged, still Haskell)
+          │
+          ▼
+      corefn.json   ──── pursjs-codegen takes over here ────►   index.js
+                                                                 foreign.js
 ```
+
+## Why
+
+Because **the codegen is the part you most want to change**, and Haskell
+is the part of the toolchain most PureScript users never touch.
+
+- **Want to add an optimisation?** New pass = new PureScript file under
+  [`src/PursJS/CoreImp/Optimizer/`](src/PursJS/CoreImp/Optimizer/).
+  No `stack` setup, no GHC versions to wrangle, no separate
+  `ghc-options`, no `cabal hell`.
+- **Want to experiment with a new lowering?** Edit
+  [`src/PursJS/CodeGen/JS.purs`](src/PursJS/CodeGen/JS.purs), `spago
+  build`, run the test suite. Round-trip is seconds.
+- **Want to study how the codegen works?** Every PursJS module has a
+  header naming its Haskell counterpart with line numbers, and
+  [`LEARN.md`](LEARN.md) walks the full CoreFn → JS mapping with worked
+  examples.
+- **Want byte-for-byte parity with stock `purs`?** That's the target,
+  and we hit it on 67 of 71 modules in our self-test (the other 4
+  differ only in fresh-name numbering — runtime-equivalent and
+  semantic-equivalent under `SEMANTIC=1`).
+
+This isn't a rewrite for its own sake — it's a deliberate extraction
+that lowers the bar for **anyone with a PureScript optimisation idea**
+to try it out.
+
+## Quick start
+
+```bash
+# 1. Get the codegen and build it
+git clone https://github.com/avinashverma/purescriptCodeGen
+cd purescriptCodeGen
+spago build
+npm link                          # exposes `pursjs-codegen` on PATH
+
+# 2. In your own PureScript project's spago.yaml:
+#
+#    workspace:
+#      backend:
+#        cmd: "pursjs-codegen"
+#
+# 3. Build as normal
+cd ../my-app
+spago build
+#   ⇒ Compiling with backend "pursjs-codegen"
+#   ⇒ pursjs-codegen: N/N modules generated (+M foreign.js copied)
+
+# 4. Run the output
+node -e "import('./output/Main/index.js').then(m => m.main());"
+```
+
+That's it. Stock `spago` workflow, alternate codegen, same output.
 
 ## Results at a glance
 
-| Test suite | Count | Pass rate | Mirrors |
+Against the full upstream test suite (vendored at
+[`tests/upstream/`](tests/upstream/), pinned to `purescript@v0.15.15`):
+
+| Test suite | Count | Pass rate | What it checks |
 |---|---|---|---|
-| `npm run test:optimize` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
-| `npm run test:passing`  | 438 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
-| `npm run test:warning`  | 68 | **62/62 codegen-eligible** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
-
-All three suites read from the vendored upstream tree at
-[`tests/upstream/`](tests/upstream/) (1039 `.purs` files from
-`purescript@v0.15.15`), so the repo is self-contained.
-
-Of the 360 codegen-eligible passing tests, only **3 fail**:
-
-  - `4179` — runtime error from our minimal `applyLazinessTransform` not
-    handling purs's selective per-binding wrapping
-  - `BigFunction` — codegen times out (9.6 MB corefn from a 16-clause pattern
-    match; our optimizer is O(?) on it)
-  - `StringEscapes` — surrogate-pair / astral code point handling in our
-    JSON parser
-
-5 more are skipped because they need typeclass-deriving features (Contravariant /
-Profunctor / Bifunctor / Functor-from-Bi-and-Pro) that aren't in our package set.
+| `npm run test:optimize` | 10 | **8/10 byte / 9/10 semantic** | Golden tests — does our codegen produce the exact JS purs's optimiser does? |
+| `npm run test:passing`  | 438 | **357/360 codegen-eligible** | Runtime tests — does the program execute and log `Done`? |
+| `npm run test:warning`  | 68 | **62/62 codegen-eligible** | Compile-only tests — does codegen complete without crashing? |
 
 Run everything in one go:
 
 ```bash
-npm test                          # all suites, ~10 minutes
-npm run test:quick                # all suites, capped at LIMIT=10, ~1 minute
+npm test                          # full run, ~10 min
+npm run test:quick                # smoke (LIMIT=10 per suite), ~1 min
 ```
 
-The remaining 4 byte-diff modules pass `SEMANTIC=1` mode (which normalises
-`$N` numbering) and pass the runtime test — they diverge only because
-purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
-(desugar, case-guards, CSE) that we don't replicate.
+The three remaining `passing` failures are:
 
-## Using this codegen in your project
+- `4179` — runtime error from our minimal `applyLazinessTransform` not
+  yet handling purs's selective per-binding wrapping
+- `BigFunction` — optimiser times out on a 9.6 MB corefn (16-clause
+  pattern match)
+- `StringEscapes` — surrogate-pair handling in JSON parsing
 
-This repo ships an executable `pursjs-codegen` that conforms to the
-[spago alternate-backend protocol](https://github.com/purescript/spago#alternate-backends).
-Spago invokes it after `purs compile --codegen corefn` so our PureScript-
-implemented codegen runs in place of `purs`'s built-in JS codegen.
+The 4 byte-diff `optimize` modules pass `SEMANTIC=1` (which renumbers
+`$N` placeholders on both sides) and pass at runtime; they diverge
+because `purs`'s fresh-name `Supply` counter is shared with CoreFn-stage
+phases (desugar, case-guards, CSE) that we don't replicate.
 
-### One-time setup
+## How it slots into your build
 
-```bash
-# 1. Clone and build this repo (must be on the v0.15.15 branch — see Version pinning)
-git clone https://github.com/<you>/purescriptCodeGen ~/purescriptCodeGen
-cd ~/purescriptCodeGen
-spago build                                # build the codegen itself
-npm link                                   # exposes `pursjs-codegen` on PATH
+```
+┌──────────────────┐    purs compile         ┌─────────────────┐
+│  Your .purs src  │ ─────────────────────►  │  corefn.json    │
+└──────────────────┘    (--codegen corefn)   └─────────────────┘
+                                                       │
+                                                       │  spago invokes the
+                                                       │  configured backend
+                                                       ▼
+                                             ┌─────────────────┐
+                                             │ pursjs-codegen  │
+                                             │  (this repo)    │
+                                             └─────────────────┘
+                                                       │
+                                                       ▼
+                                             ┌─────────────────┐
+                                             │  index.js       │
+                                             │  foreign.js     │
+                                             └─────────────────┘
 ```
 
-`npm link` reads the `bin` entry in our `package.json` and symlinks
-`pursjs-codegen` into your global node bin directory. Verify with
-`which pursjs-codegen`.
+What pursjs-codegen does at each module:
 
-### Wire it into your project
+1. Parses `corefn.json` (via Argonaut)
+2. Lowers CoreFn → CoreImp (simplified imperative JS AST)
+3. Runs 14 optimiser passes (see
+   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md))
+4. Applies the laziness transform for mutually-recursive instance
+   dictionaries
+5. Pretty-prints CoreImp → JavaScript text
+6. Copies `foreign.js` from the source tree
 
-In **your downstream PureScript project's `spago.yaml`**, add a
-`workspace.backend` entry:
-
-```yaml
-package:
-  name: my-app
-  dependencies:
-    - prelude
-    - effect
-    - console
-
-workspace:
-  package_set:
-    registry: 76.2.1
-  backend:
-    cmd: "pursjs-codegen"
-```
-
-Then build as normal:
-
-```bash
-spago build
-# ⇒ Compiling with backend "pursjs-codegen"
-# ⇒ pursjs-codegen: N/N modules generated (+M foreign.js copied)
-```
-
-Run the result with Node:
-
-```bash
-node -e "import('./output/Main/index.js').then(m => m.main());"
-```
-
-### What you get
+## What you get vs stock `purs`
 
 | | Stock `purs` codegen | `pursjs-codegen` |
 |---|---|---|
 | Output format | ES modules | ES modules (byte-identical on 67/71 of our test modules) |
-| Optimizer passes | 14 | Same 14, ported faithfully |
+| Optimiser passes | 14 | Same 14, ported faithfully |
 | `$runtime_lazy` for mutually-recursive instance dicts | ✅ | ✅ |
 | TCO (`$tco_loop`) | ✅ | ✅ |
 | Magic-do for `Effect` / `Eff` / `ST` | ✅ | ✅ |
-| Uncurried `mkFn`/`runFn`/`mkEffectFn`/`runEffectFn` (arities 0..10) | ✅ | ✅ |
-| Forks based on purs version | n/a (it *is* purs) | One branch per supported `purs` release; see [VERSIONING.md](VERSIONING.md) |
+| Uncurried `mkFn` / `runFn` / `mkEffectFn` / `runEffectFn` (arities 0..10) | ✅ | ✅ |
+| Source maps | ✅ | not yet |
+| Language for adding new passes | Haskell | PureScript |
+| Branches based on `purs` version | n/a (it *is* purs) | One per supported `purs` release — see [VERSIONING.md](VERSIONING.md) |
 
-### Version compatibility
+## Architecture
 
-Pick the branch of this repo that matches your project's `purs` version.
-The branch's `package.json` version reads `<purs-version>-pursjs.<N>`
-(e.g. `0.15.15-pursjs.0`). Mismatches will be caught at runtime — every
-`corefn.json` carries a `builtWith` field that we compare against our
-pinned version and reject (exit code 2) by default. Override with
-`--skip-version-check` if you're knowingly experimenting.
-
-### Limitations
-
-- The three failing tests called out above (`4179`, `BigFunction`,
-  `StringEscapes`) — if your project triggers one of those patterns,
-  you'll hit the same failure.
-- No source maps yet (purs has `--codegen sourcemaps`, we don't).
-- Backend mode requires a global Node install (`>=18`).
-
-## What's in this repo
-
-| Path | What it is |
-|---|---|
-| [`src/PursJS/`](src/PursJS/) | The codegen, written in PureScript. ~2300 lines across 17 modules. Every file's header names its Haskell counterpart and gives a line-by-line cross-reference pinned to purescript@c4a35b3. |
-| [`prelude-pool/`](prelude-pool/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
-| [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `npm run sync-tests`. |
-| [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test` — handles workdir setup, per-test purs invocation, our-codegen invocation, watchdog timeouts, result tabulation. |
-| [`scripts/spago-backend.mjs`](scripts/spago-backend.mjs) | The spago-alternate-backend entry point (`pursjs-codegen` on PATH after `npm link`). Walks `output/<Module>/corefn.json` and writes `index.js` + sibling `foreign.js` files. |
-| [`package.json`](package.json) | npm script entry points (`test`, `test:optimize`, `test:passing`, `test:warning`, `test:quick`, `sync-tests`, `build`) + the `bin` mapping that registers `pursjs-codegen`. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Block-diagram of the pipeline + every place this port diverges from Haskell (20-row table). |
-| [`LEARN.md`](LEARN.md) | Deep-dive tutorial: every CoreFn expression → JS mapping with worked examples. |
-
-## The PursJS code, by module
+The PursJS code is ~2300 lines across 17 modules. Each module's header
+names its Haskell counterpart and the upstream commit it was ported
+from.
 
 | Module | Haskell counterpart | Role |
 |---|---|---|
@@ -162,7 +167,7 @@ pinned version and reject (exit code 2) by default. Override with
 | [`PursJS.PSString`](src/PursJS/PSString.purs) | `Language.PureScript.PSString` | JS-style string escaping (UTF-16 code units, `\xNN`/`\uNNNN`) |
 | [`PursJS.Comments`](src/PursJS/Comments.purs) | `Language.PureScript.Comments` | `LineComment` / `BlockComment` |
 | [`PursJS.CoreFn.Types`](src/PursJS/CoreFn/Types.purs) | `CoreFn/{Expr,Binders,Meta,Module,Ann}.hs` | The CoreFn AST |
-| [`PursJS.CoreFn.FromJSON`](src/PursJS/CoreFn/FromJSON.purs) | `CoreFn/FromJSON.hs` | Parse `corefn.json` |
+| [`PursJS.CoreFn.FromJSON`](src/PursJS/CoreFn/FromJSON.purs) | `CoreFn/FromJSON.hs` | Parse `corefn.json`, version-check `builtWith` |
 | [`PursJS.CoreImp.AST`](src/PursJS/CoreImp/AST.purs) | `CoreImp/AST.hs` | Simplified imperative JS AST |
 | [`PursJS.CoreImp.Module`](src/PursJS/CoreImp/Module.purs) | `CoreImp/Module.hs` | Imports/exports/body wrapper |
 | [`PursJS.CoreImp.Traversals`](src/PursJS/CoreImp/Traversals.purs) | `CoreImp/AST.hs:172-243` | `everywhere`, `everywhereTopDown`, `everything`, monadic top-down |
@@ -184,100 +189,52 @@ pinned version and reject (exit code 2) by default. Override with
 | [`PursJS.CoreImp.Optimizer.Unused`](src/PursJS/CoreImp/Optimizer/Unused.purs) | `CoreImp/Optimizer/Unused.hs` | Dead-code passes (post-return, `undefined` apps, unused vars) |
 | [`PursJS.Main`](src/PursJS/Main.purs) | `Make/Actions.hs:230-280` | CLI entry: read corefn.json, print JS |
 
-## Quickstart
+## Repository layout
 
-```bash
-git clone <this repo>
-cd purescriptCodeGen
-
-# 1. Build the codegen
-spago build
-
-# 2. Install the prelude source pool (40 packages — matches upstream's test-suite-support)
-cd prelude-pool && spago build && cd ..
-
-# 3. Run the upstream test suites against our codegen
-npm run test:optimize              # 10 codegen golden tests   → 8/10 byte
-npm run test:passing               # 438 runtime "Done" tests  → 357/360 codegen-eligible
-npm run test:warning               # 68 codegen-completes tests → 62/62 codegen-eligible
-
-# 4. All-in-one
-npm test
-npm run test:quick                 # smoke check (LIMIT=10 per suite)
-
-# 5. (Once-off) generate JS for any module
-purs compile --codegen js,corefn -o /tmp/out path/to/Main.purs \
-  $(find prelude-pool/.spago/p -name '*.purs')
-spago run --main PursJS.Main -- /tmp/out/Main/corefn.json
-```
-
-## Key things this repo demonstrates
-
-1. **A full compiler backend is feasible to port end-to-end.** ~2300 lines
-   of PureScript replace ~3100 lines of Haskell, including all 14 optimizer
-   passes (block flattening, IIFE collapse, dead-code removal, common-value
-   inlining, common-operator inlining, function composition unfolding,
-   identity removal, unsafe-coerce removal, unsafe-partial unfolding,
-   unsafe-index unfolding, uncurried-function inlining, magic-do for three
-   different monads, tail-call elimination, integer normalisation), the
-   laziness transform for mutually-recursive bindings, and the pretty
-   printer with full operator-precedence handling.
-
-2. **Byte-equality with a reference compiler is achievable.** 67/71 modules
-   match purs's output literally; the remaining 4 differ *only* in the
-   numeric suffix of fresh names (`$24` vs `$0`) because purs's `Supply`
-   counter is shared with phases (desugar, case-guards, CSE) that we
-   don't replicate, and the Renamer destroys the original `GenIdent`
-   number before codegen sees it. Under `SEMANTIC=1` (which renumbers
-   `$N` placeholders on both sides), all 71 modules match.
-
-3. **Runtime equivalence on the upstream test suite.** 319 of 319
-   codegen-eligible tests from `purescript/tests/purs/passing/` (full
-   PureScript programs that compile to JS and assert `log "Done"`)
-   produce the expected `Done` output when their `Main/index.js` is
-   replaced with ours. Verified by `npm run test:passing`, which
-   mirrors `TestCompiler.hs::assertCompiles` from the Haskell test
-   framework.
-
-4. **The port is self-documenting.** Every PursJS source file opens with
-   a header naming the Haskell file and commit it was ported from, plus
-   a per-symbol line-number map. The optimizer passes are individually
-   testable against the upstream golden tests. [`LEARN.md`](LEARN.md)
-   walks through every CoreFn expression with a source / corefn / JS
-   triplet so you can follow the transformation by example.
-
-5. **Three classes of test infrastructure mirrored from `stack test`.**
-   The upstream Haskell test runner runs four kinds of compiler tests
-   (`passing`, `failing`, `optimize`, `warning`); we mirror the two that
-   are about codegen output (`optimize`, `passing`) and provide our own
-   sample-modules diff suite plus a node-based runtime equivalence checker.
+| Path | What it is |
+|---|---|
+| [`src/PursJS/`](src/PursJS/) | The codegen, in PureScript. |
+| [`prelude-pool/`](prelude-pool/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
+| [`tests/upstream/`](tests/upstream/) | The entire upstream `purescript/tests/purs/**` tree at our pinned version (1039 `.purs` files at `v0.15.15`). Refresh with `npm run sync-tests`. |
+| [`scripts/spago-backend.mjs`](scripts/spago-backend.mjs) | The `pursjs-codegen` entry point (exposed via `npm link`). Walks `output/<Module>/corefn.json` and writes `index.js` + sibling `foreign.js`. |
+| [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test`. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Pipeline block-diagram + per-decision-point divergence from Haskell. |
+| [`docs/TESTING.md`](docs/TESTING.md) | Test-infrastructure block-diagram + per-runner flow. |
+| [`LEARN.md`](LEARN.md) | Deep-dive tutorial: every CoreFn expression → JS mapping. |
+| [`VERSIONING.md`](VERSIONING.md) | Branch-per-purs-version policy + branch matrix. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release notes. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to set up, run tests, port a new release. |
 
 ## Version pinning
 
-This codegen targets a **specific** purescript release. `master` is pinned to
-**purs v0.15.15** (commit `c4a35b3`). See [VERSIONING.md](VERSIONING.md) for:
+This codegen targets a **specific** `purs` release. `master` is pinned
+to **purs v0.15.15** (commit `5589e81`). Every `corefn.json` carries a
+`builtWith` field; we compare it against our pin and reject mismatches
+(exit code 2) by default. Override with `--skip-version-check` if
+you're knowingly experimenting.
 
-- The full pin (purs + prelude + package-set versions)
-- The branch matrix for older purs versions
-- What changes across purs versions and which PursJS modules are affected
-- How to cut a new branch for a different purs release
+For other purs versions, check out the branch matching your target —
+see [VERSIONING.md](VERSIONING.md) for the matrix, the historical
+schema changes that drove each branch, and the recipe for cutting a
+new one.
 
-The current pin is recorded in two places:
-[`VERSIONING.md`](VERSIONING.md) (the source of truth) and
-[`tests/upstream/_SOURCE`](tests/upstream/_SOURCE) (the actual commit
-the vendored test set came from).
+## Contributing
 
-## Further reading
+PRs, issues, and questions are all welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, test expectations, and
+the porting recipe.
 
-- [LEARN.md](LEARN.md) — CoreFn-to-JS mapping in detail, every expression
-  variant explained with source / corefn / output triplets.
-- [VERSIONING.md](VERSIONING.md) — Version-pinning policy and branch matrix.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Codegen pipeline block diagram +
-  every decision-point and divergence from Haskell.
-- [docs/TESTING.md](docs/TESTING.md) — Test-infrastructure block diagram +
-  per-runner flow for all five scripts.
-- [tests/upstream-optimize/README.md](tests/upstream-optimize/README.md) — What
-  each of the 10 upstream optimize tests exercises.
-- The upstream Haskell sources cloned at `/Users/avinashverma/purescript/`
-  (or wherever `git clone https://github.com/purescript/purescript` puts
-  it) are the authoritative reference for every PursJS module.
+If you want to add a new optimiser pass, the existing passes under
+[`src/PursJS/CoreImp/Optimizer/`](src/PursJS/CoreImp/Optimizer/) are
+small and self-contained; pick one as a template, drop your file in,
+add it to the pipeline in
+[`PursJS.CoreImp.Optimizer`](src/PursJS/CoreImp/Optimizer.purs), and
+run the test suite.
+
+## License
+
+[BSD-3-Clause](LICENSE) — same as the upstream PureScript compiler.
+
+Portions of this code are derived from the
+[PureScript compiler](https://github.com/purescript/purescript)
+(copyright Phil Freeman and the PureScript contributors).

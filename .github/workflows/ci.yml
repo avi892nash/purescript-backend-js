@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "purs-*"]
+  pull_request:
+    branches: [master, "purs-*"]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Install the purescript toolchain via the official action.
+      # This pins purs + spago to the versions this branch targets.
+      - name: Set up PureScript toolchain
+        uses: purescript-contrib/setup-purescript@main
+        with:
+          purescript: "0.15.15"
+          spago: "unstable"
+
+      - name: Cache spago global store
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/spago-nodejs
+            .spago
+            prelude-pool/.spago
+          key: spago-${{ runner.os }}-${{ hashFiles('spago.yaml', 'prelude-pool/spago.yaml') }}
+          restore-keys: |
+            spago-${{ runner.os }}-
+
+      - name: Build the codegen
+        run: spago build
+
+      - name: Build the prelude source pool
+        working-directory: prelude-pool
+        run: spago build
+
+      - name: Smoke test (LIMIT=10 per suite)
+        run: npm run test:quick
+
+      # Full test runs take ~10 minutes; gate them on the smoke check.
+      # Comment this back in once the smoke run is reliably green.
+      # - name: Full test suite
+      #   run: npm test
