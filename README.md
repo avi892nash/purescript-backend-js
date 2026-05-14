@@ -57,6 +57,90 @@ The remaining 4 byte-diff modules pass `SEMANTIC=1` mode (which normalises
 purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 (desugar, case-guards, CSE) that we don't replicate.
 
+## Using this codegen in your project
+
+This repo ships an executable `pursjs-codegen` that conforms to the
+[spago alternate-backend protocol](https://github.com/purescript/spago#alternate-backends).
+Spago invokes it after `purs compile --codegen corefn` so our PureScript-
+implemented codegen runs in place of `purs`'s built-in JS codegen.
+
+### One-time setup
+
+```bash
+# 1. Clone and build this repo (must be on the v0.15.15 branch — see Version pinning)
+git clone https://github.com/<you>/purescriptCodeGen ~/purescriptCodeGen
+cd ~/purescriptCodeGen
+spago build                                # build the codegen itself
+npm link                                   # exposes `pursjs-codegen` on PATH
+```
+
+`npm link` reads the `bin` entry in our `package.json` and symlinks
+`pursjs-codegen` into your global node bin directory. Verify with
+`which pursjs-codegen`.
+
+### Wire it into your project
+
+In **your downstream PureScript project's `spago.yaml`**, add a
+`workspace.backend` entry:
+
+```yaml
+package:
+  name: my-app
+  dependencies:
+    - prelude
+    - effect
+    - console
+
+workspace:
+  package_set:
+    registry: 76.2.1
+  backend:
+    cmd: "pursjs-codegen"
+```
+
+Then build as normal:
+
+```bash
+spago build
+# ⇒ Compiling with backend "pursjs-codegen"
+# ⇒ pursjs-codegen: N/N modules generated (+M foreign.js copied)
+```
+
+Run the result with Node:
+
+```bash
+node -e "import('./output/Main/index.js').then(m => m.main());"
+```
+
+### What you get
+
+| | Stock `purs` codegen | `pursjs-codegen` |
+|---|---|---|
+| Output format | ES modules | ES modules (byte-identical on 67/71 of our test modules) |
+| Optimizer passes | 14 | Same 14, ported faithfully |
+| `$runtime_lazy` for mutually-recursive instance dicts | ✅ | ✅ |
+| TCO (`$tco_loop`) | ✅ | ✅ |
+| Magic-do for `Effect` / `Eff` / `ST` | ✅ | ✅ |
+| Uncurried `mkFn`/`runFn`/`mkEffectFn`/`runEffectFn` (arities 0..10) | ✅ | ✅ |
+| Forks based on purs version | n/a (it *is* purs) | One branch per supported `purs` release; see [VERSIONING.md](VERSIONING.md) |
+
+### Version compatibility
+
+Pick the branch of this repo that matches your project's `purs` version.
+The branch's `package.json` version reads `<purs-version>-pursjs.<N>`
+(e.g. `0.15.15-pursjs.0`). Mismatches will be caught at runtime — every
+`corefn.json` carries a `builtWith` field that we compare against our
+pinned version and reject (exit code 2) by default. Override with
+`--skip-version-check` if you're knowingly experimenting.
+
+### Limitations
+
+- The three failing tests called out above (`4179`, `BigFunction`,
+  `StringEscapes`) — if your project triggers one of those patterns,
+  you'll hit the same failure.
+- No source maps yet (purs has `--codegen sourcemaps`, we don't).
+- Backend mode requires a global Node install (`>=18`).
+
 ## What's in this repo
 
 | Path | What it is |
@@ -65,7 +149,8 @@ purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 | [`prelude-pool/`](prelude-pool/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
 | [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `npm run sync-tests`. |
 | [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test` — handles workdir setup, per-test purs invocation, our-codegen invocation, watchdog timeouts, result tabulation. |
-| [`package.json`](package.json) | npm script entry points (`test`, `test:optimize`, `test:passing`, `test:warning`, `test:quick`, `sync-tests`, `build`). |
+| [`scripts/spago-backend.mjs`](scripts/spago-backend.mjs) | The spago-alternate-backend entry point (`pursjs-codegen` on PATH after `npm link`). Walks `output/<Module>/corefn.json` and writes `index.js` + sibling `foreign.js` files. |
+| [`package.json`](package.json) | npm script entry points (`test`, `test:optimize`, `test:passing`, `test:warning`, `test:quick`, `sync-tests`, `build`) + the `bin` mapping that registers `pursjs-codegen`. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Block-diagram of the pipeline + every place this port diverges from Haskell (20-row table). |
 | [`LEARN.md`](LEARN.md) | Deep-dive tutorial: every CoreFn expression → JS mapping with worked examples. |
 

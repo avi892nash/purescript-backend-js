@@ -4,6 +4,9 @@
   "description": "The PureScript compiler's JavaScript backend, rewritten in PureScript.",
   "type": "module",
   "private": true,
+  "bin": {
+    "pursjs-codegen": "./scripts/spago-backend.mjs"
+  },
   "scripts": {
     "build": "spago build",
     "test": "node scripts/test.mjs all",
