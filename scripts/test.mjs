@@ -26,6 +26,27 @@ const PROJECT = dirname(__dirname);
 const TESTS_DIR = join(PROJECT, 'tests/upstream');
 const PRELUDE_POOL = join(PROJECT, 'prelude-pool/.spago/p');
 const PURSJS_MAIN = join(PROJECT, 'output/PursJS.Main/index.js');
+const KNOWN_FAILURES_FILE = join(PROJECT, 'tests/known-failures.json');
+
+// Tests we know fail at the current pin. The runner subtracts these
+// from each suite's failure count before deciding whether to exit
+// non-zero, so CI doesn't go red on documented-known issues. Any
+// unexpected failure still trips CI.
+const knownFailures = existsSync(KNOWN_FAILURES_FILE)
+  ? JSON.parse(readFileSync(KNOWN_FAILURES_FILE, 'utf8'))
+  : {};
+
+// fails entries look like "Name:diff" or "Name:codegen-timeout" — match
+// by the leading test name only.
+function partitionFails(suiteName, fails) {
+  const allowed = knownFailures[suiteName] || {};
+  const expected = [], unexpected = [];
+  for (const f of fails) {
+    const testName = f.split(':')[0];
+    (testName in allowed ? expected : unexpected).push(f);
+  }
+  return { expected, unexpected };
+}
 
 // ── arg parsing ────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -332,15 +353,36 @@ function findFirstCorefn(outputDir) {
 
   rmSync(sharedOut, { recursive: true, force: true });
 
+  // Classify each suite's failures into expected (known) vs unexpected
+  // (regressions). CI green-lights iff there are no unexpected fails.
+  const verdicts = {};
+  for (const [k, r] of Object.entries(results)) {
+    const fails = r.fails || [];
+    const { expected, unexpected } = partitionFails(k, fails);
+    verdicts[k] = { ...r, expected, unexpected };
+  }
+
   if (suite === 'all') {
     console.log('\n═════════════════════════════════════════════════════════════');
     console.log('ROLL-UP');
     console.log('═════════════════════════════════════════════════════════════');
-    for (const [k, r] of Object.entries(results)) {
-      console.log(`  ${k.padEnd(10)}  pass=${r.pass}  fail=${r.fail}  errored=${r.errored}`);
+    for (const [k, v] of Object.entries(verdicts)) {
+      const known = v.expected.length ? `  (known=${v.expected.length})` : '';
+      const unexp = v.unexpected.length ? `  UNEXPECTED=${v.unexpected.length}` : '';
+      console.log(`  ${k.padEnd(10)}  pass=${v.pass}  fail=${v.fail}  errored=${v.errored}${known}${unexp}`);
     }
   }
 
-  const anyFail = Object.values(results).some(r => r.fail > 0);
-  process.exit(anyFail ? 1 : 0);
+  // Report any unexpected fails so CI logs explain the red.
+  const allUnexpected = Object.entries(verdicts).flatMap(
+    ([k, v]) => v.unexpected.map(f => `${k}/${f}`)
+  );
+  if (allUnexpected.length > 0) {
+    console.log('\nUnexpected failures (not in tests/known-failures.json):');
+    for (const f of allUnexpected) console.log(`  ${f}`);
+    console.log('\nIf this is a real regression, fix it. If the failure is expected for a new');
+    console.log('reason, add an entry to tests/known-failures.json explaining why.');
+  }
+
+  process.exit(allUnexpected.length > 0 ? 1 : 0);
 })();

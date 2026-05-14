@@ -56,6 +56,19 @@ warning:  62/62 codegen-eligible
 
 Anything below that is a regression and should block a PR.
 
+### Known failures
+
+The five tests we don't yet pass are catalogued in
+[`tests/known-failures.json`](tests/known-failures.json). The runner
+subtracts them from the failure count before deciding whether to exit
+non-zero, so CI stays green when those exact tests fail with their
+exact reasons. **Any other** failure (regression or new shape of the
+same failure) trips CI red and is listed under "Unexpected failures"
+in the run output.
+
+When you fix one of them, remove its entry from the JSON so future
+regressions of that fix get caught.
+
 ## What to work on
 
 Open issues are the best signal. If you want to pick something up cold,

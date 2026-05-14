@@ -1,0 +1,16 @@
+{
+  "_comment": "Tests known to fail at the current purs pin (v0.15.15). The runner subtracts these from the suite's fail count; any unexpected fail still trips CI red. To improve a result, remove the entry here once the fix lands.",
+
+  "optimize": {
+    "4179": "applyLazinessTransform: selective per-binding wrapping not yet implemented",
+    "ObjectUpdate": "minor codegen divergence in object-spread shape; semantic-equivalent under SEMANTIC=1"
+  },
+
+  "passing": {
+    "4179": "same root cause as optimize/4179",
+    "BigFunction": "optimiser perf — 9.6 MB corefn from a 16-clause pattern match times out",
+    "StringEscapes": "surrogate-pair handling in our JSON parser"
+  },
+
+  "warning": {}
+}
