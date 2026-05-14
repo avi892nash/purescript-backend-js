@@ -25,9 +25,9 @@ and runtime-equivalent on every test we've thrown at it.
 
 | Test suite | Count | Pass rate | Mirrors |
 |---|---|---|---|
-| `bin/run-upstream-tests.sh` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
-| `bin/run-passing-tests.sh` | 438 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
-| `bin/run-warning-tests.sh` | 68 | **62/62 codegen-eligible** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
+| `npm run test:optimize` | 10 | **8/10 byte / 9/10 semantic** | `TestCompiler.hs::optimizeTests` (`purs/optimize/`) |
+| `npm run test:passing`  | 438 | **357/360 codegen-eligible** | `TestCompiler.hs::passingTests` (`purs/passing/`) |
+| `npm run test:warning`  | 68 | **62/62 codegen-eligible** | `TestCompiler.hs::warningTests` (`purs/warning/`) — codegen-side only |
 
 All three suites read from the vendored upstream tree at
 [`tests/upstream/`](tests/upstream/) (1039 `.purs` files from
@@ -48,9 +48,8 @@ Profunctor / Bifunctor / Functor-from-Bi-and-Pro) that aren't in our package set
 Run everything in one go:
 
 ```bash
-./bin/test-all.sh                 # ~10 minutes
-QUICK=1 ./bin/test-all.sh         # LIMIT=20 per suite, ~30s smoke test
-CI=1 ./bin/test-all.sh            # exit 1 if any suite has failures
+npm test                          # all suites, ~10 minutes
+npm run test:quick                # all suites, capped at LIMIT=10, ~1 minute
 ```
 
 The remaining 4 byte-diff modules pass `SEMANTIC=1` mode (which normalises
@@ -64,8 +63,9 @@ purs's fresh-name `Supply` counter is shared with CoreFn-stage phases
 |---|---|
 | [`src/PursJS/`](src/PursJS/) | The codegen, written in PureScript. ~2300 lines across 17 modules. Every file's header names its Haskell counterpart and gives a line-by-line cross-reference pinned to purescript@c4a35b3. |
 | [`sample-purs/`](sample-purs/) | A spago project that provisions the 40-package prelude source pool the upstream tests need to compile (matches `purescript/tests/support/bower.json`). |
-| [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `bin/sync-upstream-tests.sh`. |
-| [`bin/`](bin/) | Seven scripts: `sync-upstream-tests.sh`, `test-inventory.sh`, `check-version.sh`, three test runners, plus `test-all.sh` aggregator. |
+| [`tests/upstream/`](tests/upstream/) | The **entire** upstream `purescript/tests/purs/**` tree at our pinned version (`v0.15.15`, 1039 `.purs` files). Refresh with `npm run sync-tests`. |
+| [`scripts/test.mjs`](scripts/test.mjs) | The Node.js test runner that backs `npm test` — handles workdir setup, per-test purs invocation, our-codegen invocation, watchdog timeouts, result tabulation. |
+| [`package.json`](package.json) | npm script entry points (`test`, `test:optimize`, `test:passing`, `test:warning`, `test:quick`, `sync-tests`, `build`). |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Block-diagram of the pipeline + every place this port diverges from Haskell (20-row table). |
 | [`LEARN.md`](LEARN.md) | Deep-dive tutorial: every CoreFn expression → JS mapping with worked examples. |
 
@@ -112,15 +112,16 @@ spago build
 cd sample-purs && spago build && cd ..
 
 # 3. Run the upstream test suites against our codegen
-./bin/run-upstream-tests.sh        # 10 codegen golden tests   → 8/10 byte
-./bin/run-passing-tests.sh         # 438 runtime "Done" tests  → 357/360 codegen-eligible
-./bin/run-warning-tests.sh         # 68 codegen-completes tests → 62/62 codegen-eligible
+npm run test:optimize              # 10 codegen golden tests   → 8/10 byte
+npm run test:passing               # 438 runtime "Done" tests  → 357/360 codegen-eligible
+npm run test:warning               # 68 codegen-completes tests → 62/62 codegen-eligible
 
-# 4. All-in-one with version check + roll-up
-./bin/test-all.sh
+# 4. All-in-one
+npm test
+npm run test:quick                 # smoke check (LIMIT=10 per suite)
 
 # 5. (Once-off) generate JS for any module
-purs compile --codegen js,corefn -o /tmp/out tests/upstream/passing/Tiny.purs \
+purs compile --codegen js,corefn -o /tmp/out path/to/Main.purs \
   $(find sample-purs/.spago/p -name '*.purs')
 spago run --main PursJS.Main -- /tmp/out/Main/corefn.json
 ```
@@ -149,7 +150,7 @@ spago run --main PursJS.Main -- /tmp/out/Main/corefn.json
    codegen-eligible tests from `purescript/tests/purs/passing/` (full
    PureScript programs that compile to JS and assert `log "Done"`)
    produce the expected `Done` output when their `Main/index.js` is
-   replaced with ours. Verified by `bin/run-passing-tests.sh`, which
+   replaced with ours. Verified by `npm run test:passing`, which
    mirrors `TestCompiler.hs::assertCompiles` from the Haskell test
    framework.
 
@@ -176,11 +177,10 @@ This codegen targets a **specific** purescript release. `master` is pinned to
 - What changes across purs versions and which PursJS modules are affected
 - How to cut a new branch for a different purs release
 
-Check that your local purescript checkout matches the pin:
-
-```bash
-./bin/check-version.sh
-```
+The current pin is recorded in two places:
+[`VERSIONING.md`](VERSIONING.md) (the source of truth) and
+[`tests/upstream/_SOURCE`](tests/upstream/_SOURCE) (the actual commit
+the vendored test set came from).
 
 ## Further reading
 

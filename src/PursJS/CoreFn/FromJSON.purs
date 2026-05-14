@@ -51,6 +51,33 @@ foreign import truncate32 :: Number -> Int
 parseModule :: String -> Either String (Module Ann)
 parseModule s = jsonParser s >>= moduleFromJson
 
+-- | The purs version this branch supports. The `"builtWith"` field on every
+-- | corefn.json must match this for the codegen to be guaranteed correct.
+-- | See VERSIONING.md for the pinning policy.
+pinnedPursVersion :: String
+pinnedPursVersion = "0.15.15"
+
+-- | Extract the `"builtWith"` field from a corefn.json document. Returns
+-- | Nothing if the JSON is malformed or the field is missing.
+parseBuiltWith :: String -> Maybe String
+parseBuiltWith s = case jsonParser s of
+  Left _ -> Nothing
+  Right j -> case toObject j of
+    Nothing -> Nothing
+    Just o -> Obj.lookup "builtWith" o >>= toString
+
+-- | Verify the corefn was produced by a compatible purs. Returns Left with
+-- | a diagnostic if the versions disagree.
+checkVersion :: String -> Either String Unit
+checkVersion s = case parseBuiltWith s of
+  Nothing ->
+    Left "corefn.json has no \"builtWith\" field — cannot verify purs version"
+  Just v | v == pinnedPursVersion -> Right unit
+  Just v ->
+    Left $ "corefn.json was built with purs " <> v
+        <> " but this codegen branch is pinned to " <> pinnedPursVersion
+        <> ". Check out the matching codegen branch, or rerun the codegen with --skip-version-check to override."
+
 -- ---------- helpers ----------
 
 asObject :: Json -> Parser (Object Json)

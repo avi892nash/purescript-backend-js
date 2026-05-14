@@ -26,28 +26,35 @@ so cross-references stay valid.
 
 Two checks confirm we're talking to the right version:
 
-1. **At runtime**, every corefn.json carries a `"builtWith"` field. Our
-   `bin/check-version.sh` script confirms it matches the pin.
+1. **At runtime**, every corefn.json carries a `"builtWith"` field; spot-
+   check it matches the pin if you're debugging a codegen mismatch.
 2. **At test time**, the test set under `tests/upstream/` is a verbatim
    copy of `purescript@v0.15.15/tests/purs/` synced via
-   `bin/sync-upstream-tests.sh`. The `_SOURCE` file there records the
+   `npm run sync-tests`. The `_SOURCE` file there records the
    tag and commit hash for provenance. Test runners read exclusively
    from this directory — no working-tree dependency on a sibling clone.
 
-## Test set per version
+## Test set on this branch
 
-`bin/test-inventory.sh` shows what each pin maps to:
+This branch ships the test set from **v0.15.15** only. Each supported
+purs version has its own branch (see "Branch matrix" below) and ships
+its own `tests/upstream/` snapshot.
 
-| Tag      | optimize | passing | warning | failing | docs | layout | graph | psci | publish | srcmaps | total |
-|----------|---------:|--------:|--------:|--------:|-----:|-------:|------:|-----:|--------:|--------:|------:|
-| v0.13.8  |        0 |     338 |      44 |     262 |   47 |     12 |     3 |    2 |       1 |       0 |   709 |
-| v0.14.9  |        1 |     389 |      65 |     363 |   50 |     13 |     4 |    2 |       1 |       0 |   888 |
-| v0.15.0  |        2 |     407 |      63 |     397 |   51 |     14 |     4 |    2 |       1 |       0 |   941 |
-| **v0.15.15** | **10** | **438** | **68** | **444** | **55** | **15** | **4** | **2** | **1** | **2** | **1039** |
-| v0.15.16 |       10 |     439 |      68 |     444 |   55 |     15 |     4 |    2 |       1 |       2 |  1040 |
+| Category    | Count |
+|-------------|------:|
+| optimize    |    10 |
+| passing     |   438 |
+| warning     |    68 |
+| failing     |   444 |
+| docs        |    55 |
+| layout      |    15 |
+| graph       |     4 |
+| psci        |     2 |
+| publish     |     1 |
+| sourcemaps  |     2 |
+| **Total**   | **1039** |
 
-The bolded row is what `master` ships. To cut a branch for a different
-pin, see "How to cut a new branch" below.
+Provenance: see `tests/upstream/_SOURCE`.
 
 ## Branch matrix
 
@@ -96,9 +103,7 @@ git checkout v$TARGET
 
 # 4. Re-sync the test set from the new tag
 cd ../purescriptCodeGen
-./bin/sync-upstream-tests.sh                # uses the pin from VERSIONING.md
-# or:
-./bin/sync-upstream-tests.sh v$TARGET       # explicit tag
+npm run sync-tests                          # uses the pin from package.json
 
 # 5. Update sample-purs to use the matching prelude version
 cd sample-purs
@@ -107,8 +112,8 @@ spago install
 cd ..
 
 # 6. Build, test, iterate. Patch PursJS modules where the version diverges:
-spago build
-./bin/test-all.sh
+npm run build
+npm test
 
 # 7. Update VERSIONING.md to mark this branch as supported
 # 8. Commit + push

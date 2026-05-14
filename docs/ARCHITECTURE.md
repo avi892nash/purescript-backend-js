@@ -154,18 +154,17 @@ sample diff suite (`Data.EuclideanRing`, `Data.Ord`, `Effect.Class.Console`,
 ## Test infrastructure: what we mirror from upstream
 
 ```
-  purescript/                                   purescriptCodeGen/
-  tests/                                        ────────────────────
-    purs/optimize/    (10 tests, .out.js   ──>  tests/upstream-optimize/   (mirrored copy)
-                       golden diffs)             bin/run-upstream-tests.sh  (runs 'em)
+  purescript@v0.15.15/tests/purs/         purescriptCodeGen/tests/upstream/
+  ────────────────────────────       ──>  ─────────────────────────────────
+    optimize/  passing/  warning/           optimize/  passing/  warning/
+    (vendored verbatim via `npm run sync-tests` from `git archive`)
 
-    purs/passing/     (439 tests, run-time ──>  bin/run-passing-tests.sh
-                       "Done" assertion)         (mirrors TestCompiler.hs::assertCompiles)
+    Run with: npm test | npm run test:optimize | …
 
-  src/Language/...                       ──>   src/PursJS/...
-  (every .hs file with a header)               (every .purs file with a
-                                                Haskell line-range cross-reference
-                                                pinned to commit c4a35b3)
+  purescript/src/Language/...        ──>  purescriptCodeGen/src/PursJS/...
+  (every .hs file)                        (every .purs file with a header
+                                           line-range cross-reference pinned
+                                           to commit 5589e81 / v0.15.15)
 ```
 
 ## Summary of every divergence point

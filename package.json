@@ -1,0 +1,20 @@
+{
+  "name": "pursjs-codegen",
+  "version": "0.15.15-pursjs.0",
+  "description": "The PureScript compiler's JavaScript backend, rewritten in PureScript.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "spago build",
+    "test": "node scripts/test.mjs all",
+    "test:optimize": "node scripts/test.mjs optimize",
+    "test:passing": "node scripts/test.mjs passing",
+    "test:warning": "node scripts/test.mjs warning",
+    "test:quick": "node scripts/test.mjs all --limit=10",
+    "sync-tests": "git -C ${PURESCRIPT_REPO:-../purescript} archive --format=tar v0.15.15 tests/purs | tar -x -C tests/upstream --strip-components=2 && echo 'purescript@v0.15.15 (synced '$(date -u +%Y-%m-%dT%H:%M:%SZ)')' > tests/upstream/_SOURCE"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "BSD-3-Clause"
+}
